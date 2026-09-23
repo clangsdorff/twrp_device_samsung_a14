@@ -45,9 +45,12 @@ Builds run on GitHub Actions (`.github/workflows/build.yml`):
 
 - **Trigger:** a push to `main`, or **Actions → Build TWRP → Run workflow**.
   A manual run lets you pick the kernel release tag and variant.
-- **Cache:** only compiler output (ccache, content-hashed). A small change
-  recompiles only the files it touches. Source and kernel are downloaded
-  fresh on every run.
+- **Cache:**
+  - compiler output (ccache, content-hashed): a small change recompiles only
+    the files it touches
+  - repo source (`.repo`, refreshed monthly): `repo sync` only fetches what
+    changed upstream
+  - the kernel release is downloaded fresh on every run
 - **Output:** uploaded to [Gofile](https://gofile.io). The download link
   appears in the job summary.
 

@@ -34,12 +34,13 @@ env:
   KERNEL_REPO: clangsdorff/langsdorffkernel
   KERNEL_VERSION: ${{ inputs.kernel_version || '3.8.3' }}
   KERNEL_VARIANT: ${{ inputs.kernel_variant || 'pn' }}
-  # Fixed path so ccache sees identical compiler command lines every run
+  # Fixed path: ccache command lines and the cached .repo depend on it
   WORKDIR: /mnt/twrp
   CCACHE_DIR: /mnt/ccache
   KERNEL_DIR: /mnt/langsdorff
   CCACHE_MAXSIZE: 3G
   CCACHE_KEY_PREFIX: ccache-twrp-12.1-a14-
+  SOURCE_KEY_PREFIX: source-twrp-12.1-
 
 jobs:
   build:
@@ -84,16 +85,30 @@ jobs:
           git config --global color.ui false
 
       # ---------------------------------------------------------------- cache
-      # Only compiler output is cached. Caching out/ is pointless: a fresh
-      # checkout gives every source file a new mtime, so ninja would rebuild
-      # everything anyway. ccache hashes content instead, so only files that
-      # actually changed get recompiled.
+      # Compiler output is cached with ccache. Caching out/ is pointless: a
+      # fresh checkout gives every source file a new mtime, so ninja would
+      # rebuild everything anyway. ccache hashes content instead, so only
+      # files that actually changed get recompiled.
       - name: Restore ccache
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ env.CCACHE_KEY_PREFIX }}${{ github.run_id }}
           restore-keys: ${{ env.CCACHE_KEY_PREFIX }}
+
+      # The git objects in .repo are cached so repo sync only fetches what
+      # changed upstream. The key rolls over monthly to pick up new commits.
+      - name: Compute source cache key
+        id: source-key
+        run: echo "key=${SOURCE_KEY_PREFIX}$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore source cache
+        id: source-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.WORKDIR }}/.repo
+          key: ${{ steps.source-key.outputs.key }}
+          restore-keys: ${{ env.SOURCE_KEY_PREFIX }}
 
       # ---------------------------------------------------------------- source
       - name: Sync TWRP source
@@ -105,12 +120,20 @@ jobs:
           for jobs in 8 4 2; do
             if repo sync -c -j"$jobs" --retry-fetches=5 --force-sync --no-clone-bundle \
                 --no-tags --optimized-fetch --prune; then
+              du -sh .repo
               exit 0
             fi
             echo "::warning::repo sync failed with -j$jobs, retrying"
             sleep 30
           done
           exit 1
+
+      - name: Save source cache
+        if: steps.source-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.WORKDIR }}/.repo
+          key: ${{ steps.source-key.outputs.key }}
 
       # ---------------------------------------------------------------- kernel
       - name: Download langsdorffkernel
