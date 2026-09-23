@@ -1,0 +1,10 @@
+# Local stock dumps (recovery.img is >100 MB, never commit)
+/stock/
+
+# Generated from the langsdorffkernel release by scripts/prepare_kernel.py
+/prebuilt/kernel
+/prebuilt/dtb.img
+/recovery/root/lib/modules/
+/recovery/root/vendor/firmware/
+
+__pycache__/
