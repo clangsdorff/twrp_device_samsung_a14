@@ -34,11 +34,12 @@ env:
   KERNEL_REPO: clangsdorff/langsdorffkernel
   KERNEL_VERSION: ${{ inputs.kernel_version || '3.8.3' }}
   KERNEL_VARIANT: ${{ inputs.kernel_variant || 'pn' }}
-  # Fixed path: the cached .repo only works if the tree always lives here
+  # Fixed path so ccache sees identical compiler command lines every run
   WORKDIR: /mnt/twrp
   CCACHE_DIR: /mnt/ccache
   KERNEL_DIR: /mnt/langsdorff
   CCACHE_MAXSIZE: 3G
+  CCACHE_KEY_PREFIX: ccache-twrp-12.1-a14-
 
 jobs:
   build:
@@ -82,35 +83,17 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global color.ui false
 
-      # ---------------------------------------------------------------- caches
-      - name: Compute cache keys
-        id: keys
-        run: |
-          # Source cache rolls over monthly so upstream fixes are picked up
-          echo "source=source-${MANIFEST_BRANCH}-$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
-          echo "ccache-prefix=ccache-${MANIFEST_BRANCH}-${DEVICE_NAME}-" >> "$GITHUB_OUTPUT"
-
-      - name: Restore source cache
-        id: source-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.WORKDIR }}/.repo
-          key: ${{ steps.keys.outputs.source }}
-          restore-keys: source-${{ env.MANIFEST_BRANCH }}-
-
+      # ---------------------------------------------------------------- cache
+      # Only compiler output is cached. Caching out/ is pointless: a fresh
+      # checkout gives every source file a new mtime, so ninja would rebuild
+      # everything anyway. ccache hashes content instead, so only files that
+      # actually changed get recompiled.
       - name: Restore ccache
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ${{ steps.keys.outputs.ccache-prefix }}${{ github.run_id }}
-          restore-keys: ${{ steps.keys.outputs.ccache-prefix }}
-
-      - name: Restore kernel cache
-        id: kernel-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.KERNEL_DIR }}
-          key: kernel-${{ env.KERNEL_VERSION }}-${{ env.KERNEL_VARIANT }}
+          key: ${{ env.CCACHE_KEY_PREFIX }}${{ github.run_id }}
+          restore-keys: ${{ env.CCACHE_KEY_PREFIX }}
 
       # ---------------------------------------------------------------- source
       - name: Sync TWRP source
@@ -119,18 +102,9 @@ jobs:
           repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
           repo sync -c -j"$(nproc --all)" --force-sync --no-clone-bundle --no-tags \
             --optimized-fetch --prune
-          du -sh .repo
-
-      - name: Save source cache
-        if: steps.source-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.WORKDIR }}/.repo
-          key: ${{ steps.keys.outputs.source }}
 
       # ---------------------------------------------------------------- kernel
       - name: Download langsdorffkernel
-        if: steps.kernel-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           ASSET="langsdorff@${KERNEL_VERSION}${KERNEL_VARIANT}_a14.tar"
@@ -167,6 +141,9 @@ jobs:
           export USE_CCACHE=1
           export CCACHE_EXEC="$(command -v ccache)"
           export CCACHE_COMPRESS=1
+          # Prebuilt clang is re-synced every run, so its mtime always changes;
+          # hash the compiler binary instead or nothing would ever hit
+          export CCACHE_COMPILERCHECK=content
           ccache -M "$CCACHE_MAXSIZE"
           ccache -z
           export ALLOW_MISSING_DEPENDENCIES=true
@@ -181,7 +158,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ${{ steps.keys.outputs.ccache-prefix }}${{ github.run_id }}
+          key: ${{ env.CCACHE_KEY_PREFIX }}${{ github.run_id }}
 
       # ---------------------------------------------------------------- output
       - name: Package
