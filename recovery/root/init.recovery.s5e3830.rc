@@ -1,0 +1,15 @@
+on init
+    write /proc/sys/kernel/hung_task_timeout_secs 0
+
+    # USB (dwc3 configfs gadget)
+    setprop sys.usb.controller 13600000.dwc3
+    setprop sys.usb.configfs 1
+
+    start watchdogd
+
+# s3c2410_wdt is armed as soon as its module loads in first stage.
+# Feed it every 10s with a 20s margin, like stock recovery.
+service watchdogd /system/bin/watchdogd 10 20
+    user root
+    oneshot
+    seclabel u:r:watchdogd:s0
