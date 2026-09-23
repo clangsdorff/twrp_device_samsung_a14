@@ -100,8 +100,17 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         run: |
           repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
-          repo sync -c -j"$(nproc --all)" --force-sync --no-clone-bundle --no-tags \
-            --optimized-fetch --prune
+          # googlesource throttles with transient 5xx errors; retry with
+          # less parallelism instead of failing the whole run
+          for jobs in 8 4 2; do
+            if repo sync -c -j"$jobs" --retry-fetches=5 --force-sync --no-clone-bundle \
+                --no-tags --optimized-fetch --prune; then
+              exit 0
+            fi
+            echo "::warning::repo sync failed with -j$jobs, retrying"
+            sleep 30
+          done
+          exit 1
 
       # ---------------------------------------------------------------- kernel
       - name: Download langsdorffkernel
