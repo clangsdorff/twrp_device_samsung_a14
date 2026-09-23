@@ -1,0 +1,248 @@
+name: Build TWRP (SM-A145F)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: langsdorffkernel release tag
+        default: "3.8.3"
+        required: true
+      kernel_variant:
+        description: Kernel variant (SELinux mode is hardcoded per variant; recovery needs permissive)
+        default: pn
+        required: true
+        type: choice
+        options: [pn, p]
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: twrp-a14-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MANIFEST_URL: https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git
+  MANIFEST_BRANCH: twrp-12.1
+  DEVICE_PATH: device/samsung/a14
+  DEVICE_NAME: a14
+  LUNCH_TARGET: twrp_a14-eng
+  KERNEL_REPO: clangsdorff/langsdorffkernel
+  KERNEL_VERSION: ${{ inputs.kernel_version || '3.8.3' }}
+  KERNEL_VARIANT: ${{ inputs.kernel_variant || 'pn' }}
+  # Fixed path: the cached .repo only works if the tree always lives here
+  WORKDIR: /mnt/twrp
+  CCACHE_DIR: /mnt/ccache
+  KERNEL_DIR: /mnt/langsdorff
+  CCACHE_MAXSIZE: 3G
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 330
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/.ghcup
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo mkdir -p "$WORKDIR" "$CCACHE_DIR" "$KERNEL_DIR"
+          sudo chown -R "$USER:$USER" "$WORKDIR" "$CCACHE_DIR" "$KERNEL_DIR"
+          # Soong/kati can exceed runner RAM
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile >/dev/null
+          sudo swapon /mnt/swapfile
+          df -h / /mnt
+          free -h
+
+      - name: Checkout device tree
+        uses: actions/checkout@v4
+        with:
+          path: device-tree
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs \
+            gnupg gperf imagemagick lib32readline-dev lib32z1-dev libelf-dev liblz4-tool lz4 \
+            libncurses5 libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
+            schedtool squashfs-tools xsltproc zip zlib1g-dev python3 python-is-python3
+          mkdir -p ~/bin
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global color.ui false
+
+      # ---------------------------------------------------------------- caches
+      - name: Compute cache keys
+        id: keys
+        run: |
+          # Source cache rolls over monthly so upstream fixes are picked up
+          echo "source=source-${MANIFEST_BRANCH}-$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+          echo "ccache-prefix=ccache-${MANIFEST_BRANCH}-${DEVICE_NAME}-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore source cache
+        id: source-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.WORKDIR }}/.repo
+          key: ${{ steps.keys.outputs.source }}
+          restore-keys: source-${{ env.MANIFEST_BRANCH }}-
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.keys.outputs.ccache-prefix }}${{ github.run_id }}
+          restore-keys: ${{ steps.keys.outputs.ccache-prefix }}
+
+      - name: Restore kernel cache
+        id: kernel-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.KERNEL_DIR }}
+          key: kernel-${{ env.KERNEL_VERSION }}-${{ env.KERNEL_VARIANT }}
+
+      # ---------------------------------------------------------------- source
+      - name: Sync TWRP source
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
+          repo sync -c -j"$(nproc --all)" --force-sync --no-clone-bundle --no-tags \
+            --optimized-fetch --prune
+          du -sh .repo
+
+      - name: Save source cache
+        if: steps.source-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.WORKDIR }}/.repo
+          key: ${{ steps.keys.outputs.source }}
+
+      # ---------------------------------------------------------------- kernel
+      - name: Download langsdorffkernel
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          ASSET="langsdorff@${KERNEL_VERSION}${KERNEL_VARIANT}_a14.tar"
+          URL="https://github.com/${KERNEL_REPO}/releases/download/${KERNEL_VERSION}/${ASSET//@/%40}"
+          mkdir -p "$KERNEL_DIR/tmp"
+          cd "$KERNEL_DIR"
+          echo "Downloading $ASSET"
+          curl -fL --retry 3 -o tmp/kernel.tar "$URL"
+          tar -xf tmp/kernel.tar -C tmp
+          for img in boot vendor_boot; do
+            [ -f "tmp/$img.img.lz4" ] || { echo "::error::$img.img.lz4 not found in $ASSET"; exit 1; }
+            lz4 -d -f -q "tmp/$img.img.lz4" "$img.img"
+          done
+          rm -rf tmp
+
+      - name: Prepare device tree
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$DEVICE_PATH"
+          rsync -a --delete --exclude .git --exclude .github --exclude stock \
+            "$GITHUB_WORKSPACE/device-tree/" "$DEVICE_PATH/"
+          strings "$KERNEL_DIR/boot.img" | grep -m1 "Linux version" || true
+          python3 "$DEVICE_PATH/scripts/prepare_kernel.py" \
+            --boot "$KERNEL_DIR/boot.img" \
+            --vendor-boot "$KERNEL_DIR/vendor_boot.img" \
+            --device-dir "$DEVICE_PATH"
+
+      # ---------------------------------------------------------------- build
+      - name: Build recovery image
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -eo pipefail
+          export USE_CCACHE=1
+          export CCACHE_EXEC="$(command -v ccache)"
+          export CCACHE_COMPRESS=1
+          ccache -M "$CCACHE_MAXSIZE"
+          ccache -z
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          source build/envsetup.sh
+          lunch "$LUNCH_TARGET"
+          mka -j"$(nproc --all)" recoveryimage
+          ccache -s
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.keys.outputs.ccache-prefix }}${{ github.run_id }}
+
+      # ---------------------------------------------------------------- output
+      - name: Package
+        id: package
+        working-directory: ${{ env.WORKDIR }}/out/target/product/${{ env.DEVICE_NAME }}
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -m1 -oP 'TW_MAIN_VERSION_STR\s+"\K[^"]+' "$WORKDIR/bootable/recovery/variables.h")
+          NAME="twrp-${VERSION}-a14-langsdorff${KERNEL_VERSION}${KERNEL_VARIANT}-$(date -u +%Y%m%d)"
+          mkdir -p "$WORKDIR/dist"
+          cp recovery.img "$WORKDIR/dist/$NAME.img"
+          # Odin: a plain tar with recovery.img, md5 appended (.tar.md5)
+          tar -H ustar -cf "$WORKDIR/dist/$NAME.tar" recovery.img
+          ( cd "$WORKDIR/dist" && md5sum -t "$NAME.tar" >> "$NAME.tar" && mv "$NAME.tar" "$NAME.tar.md5" )
+          ( cd "$WORKDIR/dist" && sha256sum * > SHA256SUMS )
+          ls -la "$WORKDIR/dist"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Gofile
+        working-directory: ${{ env.WORKDIR }}/dist
+        env:
+          # Optional: account token so uploads land in your account instead of
+          # an expiring guest folder
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+        run: |
+          set -euo pipefail
+          TOKEN="${GOFILE_TOKEN:-}"
+          FOLDER=""
+          PAGE=""
+          for f in *.tar.md5 *.img SHA256SUMS; do
+            echo "Uploading $f"
+            ARGS=(-F "file=@$f")
+            [ -n "$TOKEN" ] && ARGS+=(-F "token=$TOKEN")
+            [ -n "$FOLDER" ] && ARGS+=(-F "folderId=$FOLDER")
+            RESP=$(curl -fsS --retry 3 --retry-delay 5 "${ARGS[@]}" https://upload.gofile.io/uploadfile)
+            [ "$(jq -r .status <<<"$RESP")" = ok ] || { echo "::error::Gofile upload failed: $RESP"; exit 1; }
+            # Later files go into the same folder (guest uploads get a guest token)
+            FOLDER=$(jq -r .data.parentFolder <<<"$RESP")
+            [ -z "$TOKEN" ] && TOKEN=$(jq -r '.data.guestToken // empty' <<<"$RESP")
+            PAGE=$(jq -r .data.downloadPage <<<"$RESP")
+          done
+          echo "::notice title=Gofile::$PAGE"
+          {
+            echo "### TWRP ${{ steps.package.outputs.version }} — SM-A145F"
+            echo "Kernel: langsdorffkernel \`${KERNEL_VERSION}${KERNEL_VARIANT}\`"
+            echo
+            echo "**Download:** $PAGE"
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.run_id }}
+          path: |
+            ${{ env.WORKDIR }}/out/error.log
+            ${{ env.WORKDIR }}/out/verbose.log.gz
+            ${{ env.WORKDIR }}/out/soong.log
+          if-no-files-found: ignore
