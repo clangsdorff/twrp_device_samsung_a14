@@ -43,14 +43,24 @@ permissive `pn` build.
 
 The 12.1 fscrypt code needs a keymaster 4 HIDL HAL, and this firmware only has
 KeyMint AIDL. The recovery therefore mounts the firmware's `system` and
-`vendor` and runs their own security stack: the TEEGRIS daemons,
-servicemanager, KeyMint, gatekeeper, keystore2 and vold. The stack unlocks
-three layers:
+`vendor` and runs only what talks to the TEE: the TEEGRIS daemons,
+servicemanager, KeyMint and gatekeeper. `langsdorff_decrypt` then unlocks
+three layers itself:
 
-- **Metadata:** `vdc cryptfs mountFstab`.
-- **Device encrypted (DE):** `enablefilecrypto` and `init_user0`.
-- **Credential encrypted (CE):** `ce_unlock` rebuilds the synthetic password
-  from `locksettings.db` and `spblob`.
+- **Metadata:** the `metadata_encryption` key, then a dm-default-key device
+  for `/data`.
+- **Device encrypted (DE):** the system and user 0 DE keys.
+- **Credential encrypted (CE):** the synthetic password from
+  `locksettings.db` and `spblob`, then the user 0 CE key.
+
+The firmware's vold and keystore2 never run. When KeyMint asks for a key
+upgrade, vold writes the upgraded key over the old one and deletes the old one
+from KeyMint; if the recovery reports a newer OS or patch level than the
+firmware, the firmware can no longer use its keys. `langsdorff_decrypt` only
+reads key files, refuses upgrades instead of performing them, and never deletes
+a key. `/metadata` is mounted read-only and a raw copy of it is kept in
+`/tmp/metadata-backup.img`. The recovery header takes its OS version and
+patch level from the kernel release's `boot.img`.
 
 `fstab_crypto.sh` adds the FBE flags to `/data` only when the firmware has a
 metadata key, so the same image also works on unencrypted ROMs.
@@ -115,7 +125,7 @@ recovery/root/init.recovery.s5e3830.rc  USB controller, watchdogd
 prebuilt/dtbo.img                   stock recovery_dtbo
 scripts/prepare_kernel.py           kernel release to prebuilts
 recovery/root/system/bin/decrypt*.sh firmware security stack and unlock flow
-ce_unlock/, apexservice_stub/       CE unlock and keystore2 helper binaries
+decrypt/                            langsdorff_decrypt and gk_verify
 patches/                            bootable/recovery patches applied by CI
 ```
 
