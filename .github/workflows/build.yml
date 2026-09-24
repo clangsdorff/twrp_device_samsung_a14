@@ -167,6 +167,23 @@ jobs:
             --vendor-boot "$KERNEL_DIR/vendor_boot.img" \
             --device-dir "$DEVICE_PATH"
 
+      - name: Patch recovery sources
+        working-directory: ${{ env.WORKDIR }}/bootable/recovery
+        run: |
+          set -euo pipefail
+          for p in "$GITHUB_WORKSPACE"/device-tree/patches/*.patch; do
+            [ -e "$p" ] || continue
+            name=$(basename "$p")
+            if git apply "$p"; then
+              echo "applied $name"
+            elif git apply --check -R "$p" 2>/dev/null; then
+              echo "already present $name"
+            else
+              echo "::error::$name no longer applies"
+              exit 1
+            fi
+          done
+
       # ---------------------------------------------------------------- build
       - name: Build recovery image
         working-directory: ${{ env.WORKDIR }}

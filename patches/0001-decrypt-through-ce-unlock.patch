@@ -1,0 +1,39 @@
+--- a/gui/action.cpp
++++ b/gui/action.cpp
+@@ -2071,27 +2071,18 @@
+ 		simulate_progress_bar();
+ 	} else {
+ 		string Password;
+-		string userID;
+ 		DataManager::GetValue("tw_crypto_password", Password);
+ 
+-		if (DataManager::GetIntValue(TW_IS_FBE)) {  // for FBE
+-			DataManager::GetValue("tw_crypto_user_id", userID);
+-			if (userID != "") {
+-				op_status = PartitionManager.Decrypt_Device(Password, atoi(userID.c_str()));
+-				if (userID != "0") {
+-					if (op_status != 0)
+-						op_status = 1;
+-					operation_end(op_status);
+-	          		return 0;
+-				}
+-			} else {
+-				LOGINFO("User ID not found\n");
+-				op_status = 1;
+-			}
+-		::sleep(1);
+-		} else {  // for FDE
+-			op_status = PartitionManager.Decrypt_Device(Password);
++		// the firmware security stack performs the unlock; the keymaster 4 path this
++		// tree was built around does not exist on this device
++		string escaped;
++		for (size_t i = 0; i < Password.size(); ++i) {
++			if (Password[i] == '\'')
++				escaped += "'\\''";
++			else
++				escaped += Password[i];
+ 		}
++		op_status = TWFunc::Exec_Cmd("/system/bin/decrypt_user.sh '" + escaped + "'", true);
+ 
+ 		if (op_status != 0)
+ 			op_status = 1;

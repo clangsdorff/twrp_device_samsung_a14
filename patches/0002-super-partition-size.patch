@@ -1,0 +1,12 @@
+--- a/partitionmanager.cpp
++++ b/partitionmanager.cpp
+@@ -4736,6 +4736,9 @@
+ 	superPartition->Is_Present = true;
+ 	superPartition->Is_SubPartition = false;
+ 	superPartition->Setup_Image();
++	// Setup_Image leaves the size at zero for a block device that is never mounted, so the
++	// backup screen shows 0MB; Update_Size takes the size from the block device itself
++	superPartition->Update_Size(true);
+ 	Add_Partition(superPartition);
+ 	PartitionManager.Output_Partition(superPartition);
+ }
