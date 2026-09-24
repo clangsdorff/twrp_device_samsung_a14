@@ -33,3 +33,10 @@ fails if one no longer applies.
   instance makes the kernel reset it and unregister the whole gadget, and USB
   stays down. The patch reopens `ep0` and rewrites the descriptors as soon as
   a run ends, while the gadget is still unbound.
+- **0007**: `Setup_Data_Media` runs before `decrypt.sh` brings the metadata
+  layer up, cannot see `/data/media/0` and settles on `/data/media`, so the
+  later mount of `/data` binds that to `/sdcard` and MTP, and user 0's files
+  show up under `/sdcard/0`. The patch moves the storage path to
+  `/data/media/0` on the first mount that can see it and re-adds the MTP
+  storage; the MTP side now replaces a storage it already has under the same
+  ID instead of listing it twice.
