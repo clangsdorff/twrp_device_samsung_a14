@@ -139,6 +139,7 @@ TW_INCLUDE_NTFS_3G := true
 TW_NO_EXFAT_FUSE := true
 TW_INCLUDE_FB2PNG := true
 TW_INCLUDE_RESETPROP := true
+TW_INCLUDE_LIBRESETPROP := true
 TW_INCLUDE_REPACKTOOLS := true
 TW_INCLUDE_LPTOOLS := true
 # configfs + FunctionFS MTP, see recovery/root/init.recovery.usb.rc
