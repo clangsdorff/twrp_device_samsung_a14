@@ -18,7 +18,7 @@ TWRP 3.7.1 (`twrp-12.1`) device tree for the Galaxy A14 4G, built with
 - [ ] Touch, display, brightness
 - [ ] ADB / MTP
 - [ ] Backup / restore
-- [ ] Decryption (FBE v2 + metadata encryption): not implemented yet
+- [ ] Decryption (FBE v2 + metadata encryption): implemented, untested
 
 ## How it works
 
@@ -38,6 +38,22 @@ every build, so the kernel files are never committed.
 
 The SELinux mode is hardcoded in each kernel variant. Recovery uses the
 permissive `pn` build.
+
+## Decryption
+
+The 12.1 fscrypt code needs a keymaster 4 HIDL HAL, and this firmware only has
+KeyMint AIDL. The recovery therefore mounts the firmware's `system` and
+`vendor` and runs their own security stack: the TEEGRIS daemons,
+servicemanager, KeyMint, gatekeeper, keystore2 and vold. The stack unlocks
+three layers:
+
+- **Metadata:** `vdc cryptfs mountFstab`.
+- **Device encrypted (DE):** `enablefilecrypto` and `init_user0`.
+- **Credential encrypted (CE):** `ce_unlock` rebuilds the synthetic password
+  from `locksettings.db` and `spblob`.
+
+`fstab_crypto.sh` adds the FBE flags to `/data` only when the firmware has a
+metadata key, so the same image also works on unencrypted ROMs.
 
 ## Building
 
@@ -98,6 +114,9 @@ recovery/root/system/etc/twrp.flags TWRP display names, backup and storage flags
 recovery/root/init.recovery.s5e3830.rc  USB controller, watchdogd
 prebuilt/dtbo.img                   stock recovery_dtbo
 scripts/prepare_kernel.py           kernel release to prebuilts
+recovery/root/system/bin/decrypt*.sh firmware security stack and unlock flow
+ce_unlock/, apexservice_stub/       CE unlock and keystore2 helper binaries
+patches/                            bootable/recovery patches applied by CI
 ```
 
 ## Credits
