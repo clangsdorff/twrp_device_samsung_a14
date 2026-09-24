@@ -1,8 +1,8 @@
-// Built as a system binary because the 12.1 tree has no recovery variant of these libs;
-// TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES puts it in the ramdisk.
+// System binaries because the 12.1 tree has no recovery variant of these libs;
+// TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES puts them in the ramdisk.
 cc_binary {
-    name: "ce_unlock",
-    srcs: ["ce_unlock.cpp"],
+    name: "langsdorff_decrypt",
+    srcs: ["langsdorff_decrypt.cpp"],
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",

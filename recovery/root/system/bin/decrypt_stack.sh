@@ -1,7 +1,7 @@
 #!/system/bin/sh
 . /system/bin/rom_mount.sh
 
-TEE_SERVICES="tee-keystore2 tee-apexservice tee-vold tee-gatekeeper tee-keymint tee-tzts tee-tzdaemon tee-servicemanager"
+TEE_SERVICES="tee-gatekeeper tee-keymint tee-tzts tee-tzdaemon tee-servicemanager"
 
 rom() { /system/bin/hal_run.sh "${ROM}/system/bin/$@"; }
 
@@ -100,23 +100,6 @@ XML
     mount -o bind /tmp/vintf /vendor/etc/vintf
 fi
 
-# keystore2's binder is VINTF-stable, and without a root manifest.xml libvintf drops the framework manifest whole
-if ! mount | grep -q ' /system/etc/vintf '; then
-    rm -rf /tmp/vintf-system
-    mkdir -p /tmp/vintf-system
-    cat > /tmp/vintf-system/manifest.xml <<'XML'
-<manifest version="1.0" type="framework">
-    <hal format="aidl">
-        <name>android.system.keystore2</name>
-        <version>5</version>
-        <fqname>IKeystoreService/default</fqname>
-    </hal>
-</manifest>
-XML
-    chmod -R 755 /tmp/vintf-system
-    mount -o bind /tmp/vintf-system /system/etc/vintf
-fi
-
 # the ramdisk ships no service_contexts, so servicemanager has no label for the keymint names
 [ -e /plat_service_contexts ] ||
     cp "${ROM}/system/etc/selinux/plat_service_contexts" /plat_service_contexts 2>/dev/null
@@ -140,12 +123,7 @@ done
 v=$(prop_from "${VEN_BP}" ro.vendor.build.security_patch)
 [ -n "${v}" ] && "${RP}" ro.vendor.build.security_patch "${v}" 2>/dev/null
 
-# without these vold builds the dm-default-key table in legacy mode and bails on this fstab
-"${RP}" ro.crypto.dm_default_key.options_format.version 2 2>/dev/null
-"${RP}" ro.crypto.set_dun true 2>/dev/null
-setprop sys.boot_completed 1
-setprop apexd.status activated
-echo "props: release=$(getprop ro.build.version.release) type=$(getprop ro.build.type) dm_fmt=$(getprop ro.crypto.dm_default_key.options_format.version)"
+echo "props: release=$(getprop ro.build.version.release) type=$(getprop ro.build.type)"
 
 # the 12.1 servicemanager fails addService from the firmware HALs, so /dev/binder goes to the firmware's own
 setprop ctl.stop servicemanager
@@ -173,16 +151,6 @@ setprop ctl.restart tee-gatekeeper
 sleep 2
 echo "gatekeeper: $(getprop init.svc.tee-gatekeeper)"
 
-mkdir -p /tmp/misc/keystore 2>/dev/null
-setprop ctl.restart tee-apexservice
-wait_service apexservice 20
-
-setprop ctl.restart tee-keystore2
-wait_service android.system.keystore2.IKeystoreService/default 40
-echo "keystore2: $(registered android.system.keystore2.IKeystoreService/default && echo registered || echo MISSING)"
-
-setprop ctl.restart tee-vold
-wait_prop init.svc.tee-vold running 20
 }
 
 # every one of these holds /vendor or /rom open and the recovery cannot flash a zip
@@ -193,11 +161,13 @@ for s in ${TEE_SERVICES}; do
 done
 sleep 2
 
-# mountFstab's dm-default-key "userdata" mapper holds the raw partition open, and
-# format data's mkfs then fails with "Error: In use by the system!"
-[ -e /dev/block/mapper/userdata ] && rom dmctl delete userdata 2>/dev/null
+# the dm-default-key "userdata" mapper holds the raw partition open, and format data's
+# mkfs then fails with "Error: In use by the system!"
+if [ -e /dev/block/mapper/userdata ] && ! grep -q ' /data ' /proc/mounts; then
+    rom dmctl delete userdata 2>/dev/null && rm -f /dev/block/mapper/userdata
+fi
 
-for m in /vendor/etc/vintf /system/etc/vintf /mnt/vendor/efs /vendor "${ROM}"; do
+for m in /vendor/etc/vintf /mnt/vendor/efs /vendor "${ROM}"; do
     umount "${m}" 2>/dev/null
 done
 echo "stack down, /vendor and /rom still mounted: $(grep -cE ' /vendor | /rom ' /proc/mounts)"

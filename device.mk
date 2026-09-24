@@ -17,7 +17,6 @@ PRODUCT_PACKAGES += \
 # /data decryption; crash_dump installs as crash_dump64, without it an abort in
 # the recovery binary leaves nothing but "Fatal signal 6" in the log
 PRODUCT_PACKAGES += \
-    apexservice_stub \
-    ce_unlock \
+    langsdorff_decrypt \
     crash_dump \
     gk_verify

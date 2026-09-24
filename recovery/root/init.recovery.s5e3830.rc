@@ -65,31 +65,6 @@ service tee-gatekeeper /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.ga
     seclabel u:r:recovery:s0
     disabled
 
-service tee-apexservice /system/bin/hal_run.sh /system/bin/apexservice_stub
-    class core
-    user root
-    group system
-    seclabel u:r:recovery:s0
-    disabled
-
-service tee-keystore2 /system/bin/hal_run.sh /rom/system/bin/keystore2 /tmp/misc/keystore
-    class main
-    user root
-    group root readproc log
-    seclabel u:r:recovery:s0
-    disabled
-
-# the stock vold exits with "fail to get knoxnative socket" unless init hands it that socket
-service tee-vold /system/bin/hal_run.sh /rom/system/bin/vold --blkid_context=u:r:recovery:s0 --blkid_untrusted_context=u:r:recovery:s0 --fsck_context=u:r:recovery:s0 --fsck_untrusted_context=u:r:recovery:s0
-    socket vold stream 0660 root mount
-    socket cryptd stream 0660 root mount
-    socket knoxnative stream 0660 root root
-    class core
-    user root
-    group root mount
-    seclabel u:r:recovery:s0
-    disabled
-
 # runs before the recovery binary parses the fstab, so one image serves encrypted and plain firmware
 service fstab-crypto /system/bin/fstab_crypto.sh
     user root

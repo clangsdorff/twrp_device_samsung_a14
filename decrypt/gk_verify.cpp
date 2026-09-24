@@ -2,9 +2,9 @@
  * Verifies a stretched credential against the enrolled gatekeeper handle and prints the
  * resulting hardware auth token as hex.
  *
- * Separate from ce_unlock because the only gatekeeper on this device is HIDL 1.0, which
+ * Separate from langsdorff_decrypt because the only gatekeeper on this device is HIDL 1.0, which
  * lives on the recovery's own hwservicemanager and needs the recovery's libhidlbase.
- * ce_unlock runs under the firmware bootstrap linker and cannot load both.
+ * langsdorff_decrypt runs under the firmware bootstrap linker and cannot load both.
  *
  * usage: gk_verify <uid> <enrolled_handle_hex> <provided_password_hex>
  */
