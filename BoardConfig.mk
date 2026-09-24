@@ -145,8 +145,17 @@ TW_INCLUDE_LPTOOLS := true
 # configfs + FunctionFS MTP, see recovery/root/init.recovery.usb.rc
 TW_EXCLUDE_DEFAULT_USB_INIT := true
 
-# Crypto: disabled for the first bring-up, handled in phase 2
-TW_INCLUDE_CRYPTO := false
+# Crypto: the 12.1 fscrypt code wants keymaster 4 HIDL, this device only has
+# KeyMint AIDL. The firmware's own security stack does the work instead, see
+# recovery/root/system/bin/decrypt*.sh. Crypto stays on so /data is treated as FBE.
+TW_INCLUDE_CRYPTO := true
+TW_INCLUDE_CRYPTO_FBE := true
+# TWRP's own metadata decrypt path hangs at boot on this device
+TW_INCLUDE_FBE_METADATA_DECRYPT := false
+TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES += $(TARGET_OUT_EXECUTABLES)/apexservice_stub
+TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES += $(TARGET_OUT_EXECUTABLES)/ce_unlock
+TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES += $(TARGET_OUT_EXECUTABLES)/gk_verify
+TW_RECOVERY_ADDITIONAL_RELINK_BINARY_FILES += $(TARGET_OUT_EXECUTABLES)/crash_dump64
 
 # Debug
 TARGET_USES_LOGD := true
