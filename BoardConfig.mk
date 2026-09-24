@@ -67,9 +67,9 @@ BOARD_MKBOOTIMG_ARGS += --dtb $(DEVICE_PATH)/prebuilt/dtb.img
 BOARD_INCLUDE_RECOVERY_DTBO := true
 BOARD_PREBUILT_RECOVERY_DTBOIMAGE := $(DEVICE_PATH)/prebuilt/dtbo.img
 
-# Match stock recovery header os_version / os_patch_level.
-# Appended after the build system's own version args, so these win.
-BOARD_MKBOOTIMG_ARGS += --os_version 15.0.0 --os_patch_level 2026-05-05
+# os_version / os_patch_level of the kernel release's boot.img, written by
+# prepare_kernel.py. Appended after the build system's own version args, so these win.
+include $(DEVICE_PATH)/prebuilt/bootimg_version.mk
 
 # Ramdisk (stock recovery ramdisk is lz4 legacy too)
 BOARD_RAMDISK_USE_LZ4 := true

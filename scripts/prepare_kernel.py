@@ -51,7 +51,14 @@ def extract_kernel(boot):
     if header_version not in (3, 4):
         die(f"boot.img: unsupported header version {header_version}")
     # v3/v4 boot images always use 4096 byte pages
-    return boot[4096:4096 + kernel_size]
+    return boot[4096:4096 + kernel_size], os_version
+
+
+def decode_os_version(packed):
+    version, patch = packed >> 11, packed & 0x7ff
+    a, b, c = (version >> 14) & 0x7f, (version >> 7) & 0x7f, version & 0x7f
+    year, month = 2000 + (patch >> 4), patch & 0xf
+    return f"{a}.{b}.{c}", f"{year:04d}-{month:02d}-01"
 
 
 def parse_vendor_boot(vendor_boot):
@@ -132,9 +139,16 @@ def main():
         shutil.rmtree(path, ignore_errors=True)
 
     with open(args.boot, "rb") as f:
-        kernel = extract_kernel(f.read())
+        kernel, os_version = extract_kernel(f.read())
     write_file(os.path.join(device_dir, "prebuilt", "kernel"), kernel)
     print(f"kernel: {len(kernel)} bytes")
+
+    # KeyMint binds keys to the booted image's OS version and patch level, so the
+    # recovery has to report exactly what the firmware's boot.img does
+    version, patch = decode_os_version(os_version)
+    write_file(os.path.join(device_dir, "prebuilt", "bootimg_version.mk"),
+               f"BOARD_MKBOOTIMG_ARGS += --os_version {version} --os_patch_level {patch}\n".encode())
+    print(f"boot.img os_version {version}, os_patch_level {patch}")
 
     with open(args.vendor_boot, "rb") as f:
         dtb, fragments = parse_vendor_boot(f.read())

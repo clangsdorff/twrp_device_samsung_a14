@@ -4,6 +4,7 @@
 # Generated from the langsdorffkernel release by scripts/prepare_kernel.py
 /prebuilt/kernel
 /prebuilt/dtb.img
+/prebuilt/bootimg_version.mk
 /recovery/root/lib/modules/
 /recovery/root/vendor/firmware/
 
