@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: twrp-a14-${{ github.ref }}
@@ -210,6 +211,17 @@ jobs:
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ env.CCACHE_KEY_PREFIX }}${{ github.run_id }}
+
+      # Each run saves a new ~0.5 GB ccache entry; keep only this one under the 10 GB limit
+      - name: Delete older ccache entries
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          keep="${CCACHE_KEY_PREFIX}${{ github.run_id }}"
+          gh cache list -R "${{ github.repository }}" --key "$CCACHE_KEY_PREFIX" -L 100 --json id,key \
+            -q ".[] | select(.key != \"$keep\") | .id" |
+            while read -r id; do gh cache delete "$id" -R "${{ github.repository }}"; done
 
       # ---------------------------------------------------------------- output
       - name: Package
