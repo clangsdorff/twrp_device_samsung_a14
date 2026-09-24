@@ -62,6 +62,8 @@ if [ -d /data/media/0/Android ] || [ -d /data/data/android ]; then
     /system/bin/twrp set tw_is_encrypted 0 >/dev/null 2>&1
 elif [ -s /tmp/.ce_pwtype ]; then
     /system/bin/twrp set tw_crypto_pwtype_0 "$(cat /tmp/.ce_pwtype)" >/dev/null 2>&1
+    # Set_FBE_Status marks /data decrypted once the metadata layer is up, which hides Decrypt Data
+    /system/bin/twrp set tw_is_decrypted 0 >/dev/null 2>&1
 fi
 
 # /sdcard was set up as a bare ramdisk directory because /data was not mounted yet
