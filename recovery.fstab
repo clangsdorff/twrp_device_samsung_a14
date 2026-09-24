@@ -1,5 +1,6 @@
 # Android fstab file (TWRP, Galaxy A14 SM-A145F / s5e3830)
 # Display names, backup and storage flags live in recovery/root/system/etc/twrp.flags
+# fstab_crypto.sh adds the FBE flags to /data at boot when the firmware has a metadata key
 #<src>                         <mnt_point>     <type>  <mnt_flags and options>                                                                                           <fs_mgr_flags>
 
 # Logical partitions (super)
@@ -11,7 +12,7 @@ system_dlkm                    /system_dlkm    erofs   ro                       
 vendor_dlkm                    /vendor_dlkm    erofs   ro                                                                                                                wait,logical
 
 /dev/block/by-name/metadata    /metadata       ext4    noatime,nosuid,nodev,noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic                           wait,check,formattable
-/dev/block/by-name/userdata    /data           f2fs    noatime,nosuid,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678,inlinecrypt   wait,check,quota,reservedsize=128M,checkpoint=fs,fscompress,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized,keydirectory=/metadata/vold/metadata_encryption
+/dev/block/by-name/userdata    /data           f2fs    noatime,nosuid,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678               wait,check,quota,reservedsize=128M,checkpoint=fs,fscompress,length=-20480
 /dev/block/by-name/cache       /cache          ext4    noatime,nosuid,nodev,noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic                           wait,check,formattable
 /dev/block/by-name/efs         /efs            ext4    noatime,nosuid,nodev,noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic                           wait,check
 /dev/block/by-name/cpefs       /cpefs          ext4    noatime,nosuid,nodev,noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic                           wait,check,nofail

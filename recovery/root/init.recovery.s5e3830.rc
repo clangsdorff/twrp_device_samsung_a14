@@ -7,9 +7,101 @@ on init
 
     start watchdogd
 
+on fs
+    symlink /dev/block/platform/12100000.dwmmc0 /dev/block/bootdevice
+    exec_start fstab-crypto
+
+on boot
+    setprop servicemanager.ready true
+    setprop twrp.decrypt.run 1
+    # the ramdisk keystore2 cannot reach the firmware KeyMint and restarts every 5 seconds
+    stop keystore2
+
+on property:twrp.decrypt.run=1
+    start decrypt
+
 # s3c2410_wdt is armed as soon as its module loads in first stage.
 # Feed it every 10s with a 20s margin, like stock recovery.
 service watchdogd /system/bin/watchdogd 10 20
     user root
     oneshot
     seclabel u:r:watchdogd:s0
+
+# TEEGRIS hashes the exec'd image, so these two must not go through the bootstrap linker
+service tee-tzdaemon /vendor/bin/tzdaemon
+    class main
+    user root
+    group root system readproc
+    setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib64/hw
+    seclabel u:r:recovery:s0
+    disabled
+
+service tee-tzts /vendor/bin/tzts_daemon
+    class main
+    user root
+    group root system
+    setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib64/hw
+    seclabel u:r:recovery:s0
+    disabled
+
+service tee-servicemanager /system/bin/hal_run.sh /rom/system/bin/servicemanager
+    class core
+    user root
+    group root readproc
+    seclabel u:r:recovery:s0
+    disabled
+
+service tee-keymint /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.security.keymint-service
+    class main
+    user root
+    group root system drmrpc
+    seclabel u:r:recovery:s0
+    disabled
+
+service tee-gatekeeper /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.gatekeeper@1.0-service
+    class main
+    user root
+    group root system
+    seclabel u:r:recovery:s0
+    disabled
+
+service tee-apexservice /system/bin/hal_run.sh /system/bin/apexservice_stub
+    class core
+    user root
+    group system
+    seclabel u:r:recovery:s0
+    disabled
+
+service tee-keystore2 /system/bin/hal_run.sh /rom/system/bin/keystore2 /tmp/misc/keystore
+    class main
+    user root
+    group root readproc log
+    seclabel u:r:recovery:s0
+    disabled
+
+# the stock vold exits with "fail to get knoxnative socket" unless init hands it that socket
+service tee-vold /system/bin/hal_run.sh /rom/system/bin/vold --blkid_context=u:r:recovery:s0 --blkid_untrusted_context=u:r:recovery:s0 --fsck_context=u:r:recovery:s0 --fsck_untrusted_context=u:r:recovery:s0
+    socket vold stream 0660 root mount
+    socket cryptd stream 0660 root mount
+    socket knoxnative stream 0660 root root
+    class core
+    user root
+    group root mount
+    seclabel u:r:recovery:s0
+    disabled
+
+# runs before the recovery binary parses the fstab, so one image serves encrypted and plain firmware
+service fstab-crypto /system/bin/fstab_crypto.sh
+    user root
+    group root system
+    seclabel u:r:recovery:s0
+    oneshot
+    disabled
+
+service decrypt /system/bin/decrypt.sh
+    class main
+    user root
+    group root system
+    seclabel u:r:recovery:s0
+    oneshot
+    disabled
