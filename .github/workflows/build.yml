@@ -207,7 +207,7 @@ jobs:
           export LC_ALL=C
           source build/envsetup.sh
           lunch "$LUNCH_TARGET"
-          mka -j"$(nproc --all)" recoveryimage
+          mka -j"$(nproc --all)" --skip-soong-tests recoveryimage
           ccache -s
 
       - name: Save ccache
