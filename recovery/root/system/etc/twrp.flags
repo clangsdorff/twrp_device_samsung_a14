@@ -20,7 +20,6 @@
 /vbmeta            emmc      /dev/block/by-name/vbmeta                                flags=display="VBMeta";backup=1;flashimg=1
 /vbmeta_system     emmc      /dev/block/by-name/vbmeta_system                         flags=display="VBMeta System";backup=1;flashimg=1
 /modem             emmc      /dev/block/by-name/radio                                 flags=display="Modem";backup=1;flashimg=1
-/super             emmc      /dev/block/by-name/super                                 flags=display="Super";backup=1;flashimg=1
 
 /external_sd       auto      /dev/block/mmcblk1p1              /dev/block/mmcblk1     flags=display="MicroSD";storage;wipeingui;removable
 /usb_otg           auto      /dev/block/sda1                   /dev/block/sda         flags=display="USB OTG";storage;wipeingui;removable
