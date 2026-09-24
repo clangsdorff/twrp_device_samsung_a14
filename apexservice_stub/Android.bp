@@ -1,0 +1,14 @@
+// the NDK binder ABI is frozen across API levels, so this links libbinder_ndk and is
+// launched through hal_run.sh to pick up the firmware's own libbinder_ndk.so
+cc_binary {
+    name: "apexservice_stub",
+    srcs: ["apexservice_stub.cpp"],
+    shared_libs: [
+        "libbinder_ndk",
+        "liblog",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
