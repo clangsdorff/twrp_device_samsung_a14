@@ -34,22 +34,26 @@ fi
 
 decrypt() { /system/bin/hal_run.sh /system/bin/langsdorff_decrypt "$@"; }
 
+# userdata is mounted at an anchor the recovery never touches: fscrypt keys live on the
+# superblock, and this reference keeps them when the recovery unmounts and remounts /data
+ANCHOR=/tmp/.userdata
 USERDATA=$(readlink -f /dev/block/by-name/userdata)
-if ! grep -q ' /data ' /proc/mounts; then
-    decrypt metadata "${USERDATA}"
-    rc=$?
-    if [ "${rc}" = 0 ]; then
+mkdir -p "${ANCHOR}"
+if ! grep -q " ${ANCHOR} " /proc/mounts; then
+    decrypt metadata "${USERDATA}" &&
         mount -t f2fs -o noatime,nosuid,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678,inlinecrypt \
-            /dev/block/mapper/userdata /data
-    fi
+            /dev/block/mapper/userdata "${ANCHOR}"
 fi
 
-if grep -q ' /data ' /proc/mounts; then
-    echo "/data mounted: $(grep ' /data ' /proc/mounts)"
+if grep -q " ${ANCHOR} " /proc/mounts; then
+    echo "userdata mounted: $(grep " ${ANCHOR} " /proc/mounts)"
     decrypt de && decrypt ce
     echo "ce exit: $?"
+    # the recovery mounts /data from the mapper itself and then sets up /sdcard and MTP
+    grep -q ' /data ' /proc/mounts || /system/bin/twrp mount /data >/dev/null 2>&1
+    grep -q ' /data ' /proc/mounts || mount --bind "${ANCHOR}" /data
 else
-    echo "/data not mounted"
+    echo "userdata not mounted"
 fi
 
 # the recovery decided /data was encrypted before this script mounted it, and its own

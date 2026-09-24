@@ -90,11 +90,13 @@ const size_t kGcmNonceLen = 12;
 const size_t kGcmTagLen = 16;
 const size_t kHashPersonLen = 128;  // SHA512_CBLOCK
 
+// userdata stays mounted here for as long as the recovery runs, whatever it does to /data
+#define DATA_ROOT "/tmp/.userdata"
 const char* kMetadataKeyDir = "/metadata/vold/metadata_encryption/key";
-const char* kSystemDeKeyDir = "/data/unencrypted/key";
-const char* kUser0DeKeyDir = "/data/misc/vold/user_keys/de/0";
-const char* kUser0CeKeyDir = "/data/misc/vold/user_keys/ce/0/current";
-const char* kSpblobDir = "/data/system_de/0/spblob/";
+const char* kSystemDeKeyDir = DATA_ROOT "/unencrypted/key";
+const char* kUser0DeKeyDir = DATA_ROOT "/misc/vold/user_keys/de/0";
+const char* kUser0CeKeyDir = DATA_ROOT "/misc/vold/user_keys/ce/0/current";
+const char* kSpblobDir = DATA_ROOT "/system_de/0/spblob/";
 const char* kDmName = "userdata";
 
 enum Exit { OK = 0, FAIL = 1, NEED_CREDENTIAL = 2, BAD_CREDENTIAL = 3, NEEDS_UPGRADE = 4 };
@@ -312,9 +314,9 @@ Exit retrieveKey(KeyMint& km, const std::string& dir, const std::vector<uint8_t>
 }
 
 bool addFscryptKey(const std::vector<uint8_t>& raw, const char* what) {
-    int dfd = open("/data", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    int dfd = open(DATA_ROOT, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dfd < 0) {
-        LINE("  open(/data): %s", strerror(errno));
+        LINE("  open(" DATA_ROOT "): %s", strerror(errno));
         return false;
     }
     std::vector<uint8_t> buf(sizeof(fscrypt_add_key_arg_local) + raw.size(), 0);
@@ -453,7 +455,7 @@ int cmdDe(KeyMint& km) {
 // sp-handle is a signed int64 decimal; the spblob filenames use its unsigned hex form.
 bool getProtectorHandle(std::string* handleHex) {
     sqlite3* db = nullptr;
-    if (sqlite3_open_v2("file:/data/system/locksettings.db?mode=ro&immutable=1", &db,
+    if (sqlite3_open_v2("file:" DATA_ROOT "/system/locksettings.db?mode=ro&immutable=1", &db,
                         SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nullptr) != SQLITE_OK) {
         if (db) sqlite3_close(db);
         return false;
@@ -479,7 +481,7 @@ bool getProtectorHandle(std::string* handleHex) {
 
 bool getProtectorKeyBlob(const std::string& handleHex, std::vector<uint8_t>* blob) {
     sqlite3* db = nullptr;
-    if (sqlite3_open_v2("file:/data/misc/keystore/persistent.sqlite?mode=ro&immutable=1", &db,
+    if (sqlite3_open_v2("file:" DATA_ROOT "/misc/keystore/persistent.sqlite?mode=ro&immutable=1", &db,
                         SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nullptr) != SQLITE_OK) {
         if (db) sqlite3_close(db);
         return false;

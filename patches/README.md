@@ -10,3 +10,7 @@ fails if one no longer applies.
 - **0002**: `Setup_Super_Partition` builds the synthetic `/super` entry with
   `Setup_Image`, which never sizes a block device that is not mounted, so the
   backup screen shows it as 0MB. The patch sizes it from the block device.
+- **0003**: `Find_Actual_Block_Device` resolves `/data` to the raw userdata
+  partition, which is ciphertext under metadata encryption. Once
+  `langsdorff_decrypt` has created `/dev/block/mapper/userdata`, the patch makes
+  every mount of `/data` use that instead.

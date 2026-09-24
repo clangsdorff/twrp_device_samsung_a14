@@ -1,0 +1,14 @@
+--- a/partition.cpp
++++ b/partition.cpp
+@@ -3199,6 +3199,11 @@
+ 			}
+ 		}
+ 		return;
++	} else if (Mount_Point == "/data" && TWFunc::Path_Exists("/dev/block/mapper/userdata")) {
++		// langsdorff_decrypt set up the dm-default-key device; the raw partition is ciphertext
++		Actual_Block_Device = "/dev/block/mapper/userdata";
++		Is_Present = true;
++		return;
+ 	} else if (Is_Decrypted && !Decrypted_Block_Device.empty()) {
+ 		Actual_Block_Device = Decrypted_Block_Device;
+ 		if (TWFunc::Path_Exists(Decrypted_Block_Device)) {

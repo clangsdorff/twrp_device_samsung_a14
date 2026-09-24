@@ -161,12 +161,6 @@ for s in ${TEE_SERVICES}; do
 done
 sleep 2
 
-# the dm-default-key "userdata" mapper holds the raw partition open, and format data's
-# mkfs then fails with "Error: In use by the system!"
-if [ -e /dev/block/mapper/userdata ] && ! grep -q ' /data ' /proc/mounts; then
-    rom dmctl delete userdata 2>/dev/null && rm -f /dev/block/mapper/userdata
-fi
-
 for m in /vendor/etc/vintf /mnt/vendor/efs /vendor "${ROM}"; do
     umount "${m}" 2>/dev/null
 done
