@@ -143,6 +143,8 @@ TW_INCLUDE_FB2PNG := true
 TW_INCLUDE_RESETPROP := true
 TW_INCLUDE_REPACKTOOLS := true
 TW_INCLUDE_LPTOOLS := true
+# configfs + FunctionFS MTP, see recovery/root/init.recovery.usb.rc
+TW_EXCLUDE_DEFAULT_USB_INIT := true
 
 # Crypto: disabled for the first bring-up, handled in phase 2
 TW_INCLUDE_CRYPTO := false
