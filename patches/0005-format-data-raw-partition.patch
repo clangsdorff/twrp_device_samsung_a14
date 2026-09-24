@@ -1,0 +1,14 @@
+--- a/partition.cpp
++++ b/partition.cpp
+@@ -2161,6 +2161,11 @@
+ 	if (!base_partition->PreWipeEncryption())
+ 		goto exit;
+ 
++	// the new filesystem goes on the raw partition, then the firmware sets up a fresh metadata key
++	if (Mount_Point == "/data" && TWFunc::Path_Exists("/dev/block/mapper/userdata") &&
++			TWFunc::Exec_Cmd("/system/bin/data_release.sh") != 0)
++		LOGERR("Unable to release the decrypted userdata device.\n");
++
+ 	Find_Actual_Block_Device();
+ 	if (!Is_Present) {
+ 		LOGINFO("Block device not present, cannot format %s.\n", Display_Name.c_str());

@@ -19,3 +19,8 @@ fails if one no longer applies.
   most of the screen stays swapped. The patch renders RGBA directly. It also
   drops the blank/unblank in `fbdev_init`: powering the panel down there stalls
   the unblank until the NVT touch self test gives up, about 10 s of black screen.
+- **0005**: Format Data runs `make_f2fs` on whatever `Find_Actual_Block_Device`
+  returns, which after 0003 is the dm-default-key device, still mounted at the
+  decrypt anchor. The patch runs `data_release.sh` first, which unmounts it and
+  removes the device, so the raw partition is formatted and TWRP then wipes
+  `/metadata` as before.
