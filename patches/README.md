@@ -14,3 +14,8 @@ fails if one no longer applies.
   partition, which is ciphertext under metadata encryption. Once
   `langsdorff_decrypt` has created `/dev/block/mapper/userdata`, the patch makes
   every mount of `/data` use that instead.
+- **0004**: fb0 reports BGRA offsets but DECON scans out RGBA, and the
+  `RECOVERY_BGRA` swap works in place on a buffer TWRP only partly redraws, so
+  most of the screen stays swapped. The patch renders RGBA directly. It also
+  drops the blank/unblank in `fbdev_init`: powering the panel down there stalls
+  the unblank until the NVT touch self test gives up, about 10 s of black screen.

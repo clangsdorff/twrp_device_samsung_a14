@@ -9,3 +9,4 @@
 /recovery/root/vendor/firmware/
 
 __pycache__/
+.DS_Store
