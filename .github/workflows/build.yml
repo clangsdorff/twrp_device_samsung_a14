@@ -99,8 +99,8 @@ jobs:
           key: ${{ env.CCACHE_KEY_PREFIX }}${{ github.run_id }}
           restore-keys: ${{ env.CCACHE_KEY_PREFIX }}
 
-      # The git objects in .repo are cached so repo sync only fetches what
-      # changed upstream. The key rolls over monthly to pick up new commits.
+      # twrp-12.1 no longer changes upstream, so .repo is saved once and reused;
+      # any existing entry under the prefix is restored
       - name: Compute source cache key
         id: source-key
         run: echo "key=${SOURCE_KEY_PREFIX}$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
@@ -118,6 +118,11 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         run: |
           repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
+          if [ -n "${{ steps.source-cache.outputs.cache-matched-key }}" ] &&
+              repo sync -c -j"$(nproc --all)" --local-only --force-sync; then
+            du -sh .repo
+            exit 0
+          fi
           # googlesource throttles with transient 5xx errors; retry with
           # less parallelism instead of failing the whole run
           for jobs in 8 4 2; do
@@ -132,7 +137,7 @@ jobs:
           exit 1
 
       - name: Save source cache
-        if: steps.source-cache.outputs.cache-hit != 'true'
+        if: steps.source-cache.outputs.cache-matched-key == ''
         uses: actions/cache/save@v4
         with:
           path: ${{ env.WORKDIR }}/.repo
