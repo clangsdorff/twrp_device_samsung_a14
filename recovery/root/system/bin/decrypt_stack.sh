@@ -161,6 +161,19 @@ for s in ${TEE_SERVICES}; do
 done
 sleep 2
 
+# tzdaemon runs as root here, the firmware's cannot open what this one created and gatekeeper
+# then rejects every credential; the recovery policy also leaves it unlabeled. The top
+# directories come from the firmware's init, so they carry its owner and label.
+for d in /data/vendor/tee /mnt/vendor/efs/tee; do
+    [ -d "${d}" ] || continue
+    owner=$(stat -c %u:%g "${d}")
+    label=$(stat -c %C "${d}")
+    [ "${owner}" = 0:0 ] && continue
+    case "${label}" in *unlabeled*|"") continue ;; esac
+    chown -R "${owner}" "${d}"
+    chcon -R "${label}" "${d}"
+done
+
 for m in /vendor/etc/vintf /mnt/vendor/efs /vendor "${ROM}"; do
     umount "${m}" 2>/dev/null
 done
