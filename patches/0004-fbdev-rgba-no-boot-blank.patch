@@ -1,14 +1,5 @@
 --- a/minuitwrp/graphics_fbdev.cpp
 +++ b/minuitwrp/graphics_fbdev.cpp
-@@ -113,7 +113,7 @@
-     displayed_buffer = n;
- }
- 
--static GRSurface* fbdev_init(minui_backend* backend) {
-+static GRSurface* fbdev_init(minui_backend* backend __unused) {
-     int retry = 20;
-     int fd = -1;
-     while (fd == -1) {
 @@ -209,7 +209,11 @@
      if (vi.bits_per_pixel == 16) {
          printf("setting GGL_PIXEL_FORMAT_RGB_565\n");
@@ -22,14 +13,13 @@
          printf("setting GGL_PIXEL_FORMAT_BGRA_8888\n");
          gr_framebuffer[0].format = GGL_PIXEL_FORMAT_BGRA_8888;
      } else if (vi.red.offset == 0) {
-@@ -274,8 +278,8 @@
+@@ -274,7 +278,8 @@
  
      printf("framebuffer: %d (%d x %d)\n", fb_fd, gr_draw->width, gr_draw->height);
  
 -    fbdev_blank(backend, true);
--    fbdev_blank(backend, false);
-+    // powering the panel down here stalls the unblank until the NVT touch self test
-+    // gives up on the dark panel, about 10 s
++    // powering the panel down stalls the unblank until the NVT touch self test gives up,
++    // about 10 s; the unblank alone moves DECON out of INIT, where it drops every pan
+     fbdev_blank(backend, false);
  
      smem_len = fi.smem_len;
- 
