@@ -25,3 +25,11 @@ fails if one no longer applies.
   decrypt anchor. The patch runs `data_release.sh` first, which unmounts it and
   removes the device, so the raw partition is formatted and TWRP then wipes
   `/metadata` as before.
+- **0006**: When the gadget is unbound under it (sideload switches USB to
+  adb only), the MTP server leaves `run()` with its control endpoint closed
+  and starts the next `run()` on that closed handle. That run fails and
+  reopens `ep0` only then, typically after USB is back to `mtp,adb`. The
+  function is mounted with `no_disconnect=1`, so reopening a deactivated
+  instance makes the kernel reset it and unregister the whole gadget, and USB
+  stays down. The patch reopens `ep0` and rewrites the descriptors as soon as
+  a run ends, while the gadget is still unbound.

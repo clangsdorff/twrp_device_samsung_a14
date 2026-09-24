@@ -1,0 +1,56 @@
+--- a/mtp/ffs/MtpServer.cpp
++++ b/mtp/ffs/MtpServer.cpp
+@@ -164,19 +164,23 @@
+ 	return (getStorage(id) != nullptr);
+ }
+ 
++void MtpServer::reopen() {
++	mHandle->close();
++	int controlFd = open(FFS_MTP_EP0, O_RDWR);
++	bool ffs_ok = access(FFS_MTP_EP0, W_OK) == 0;
++	if (ffs_ok) {
++		bool aio_compat = android::base::GetBoolProperty("sys.usb.ffs.aio_compat", false);
++		mHandle = aio_compat ? new MtpFfsCompatHandle(controlFd) : new MtpFfsHandle(controlFd);
++		mHandle->writeDescriptors(mPtp);
++	} else {
++		mHandle = new MtpDevHandle(controlFd);
++	}
++}
++
+ void MtpServer::run() {
+ 	if (mHandle->start(mPtp)) {
+ 		MTPE("Failed to start usb driver!\n");
+-		mHandle->close();
+-        int controlFd = open(FFS_MTP_EP0, O_RDWR);
+-        bool ffs_ok = access(FFS_MTP_EP0, W_OK) == 0;
+-        if (ffs_ok) {
+-            bool aio_compat = android::base::GetBoolProperty("sys.usb.ffs.aio_compat", false);
+-            mHandle = aio_compat ? new MtpFfsCompatHandle(controlFd) : new MtpFfsHandle(controlFd);
+-            mHandle->writeDescriptors(mPtp);
+-        } else {
+-            mHandle = new MtpDevHandle(controlFd);
+-        }
++		reopen();
+ 		return;
+ 	}
+ 
+@@ -256,7 +260,8 @@
+ 	}
+ 	mObjectEditList.clear();
+ 
+-	mHandle->close();
++	// the next run() would start on the closed control endpoint and fail once more
++	reopen();
+ }
+ 
+ void MtpServer::sendObjectAdded(MtpObjectHandle handle) {
+--- a/mtp/ffs/MtpServer.h
++++ b/mtp/ffs/MtpServer.h
+@@ -110,6 +110,7 @@
+ 	void				removeStorage(MtpStorage* storage);
+ 
+ 	void				run();
++	void				reopen();
+ 
+ 	void				sendObjectAdded(MtpObjectHandle handle);
+ 	void				sendObjectRemoved(MtpObjectHandle handle);
