@@ -250,6 +250,13 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ env.WORKDIR }}/dist
+          retention-days: 14
+
       - name: Upload to Gofile
         working-directory: ${{ env.WORKDIR }}/dist
         env:
