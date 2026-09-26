@@ -7,7 +7,7 @@ echo "===== data_release ====="
 for m in /sdcard /data /tmp/.userdata; do
     grep -q " ${m} " /proc/mounts && umount "${m}"
 done
-/system/bin/hal_run.sh "${ROM}/system/bin/dmctl" delete userdata
+/system/bin/hal_run.sh /system/tee/bin/dmctl delete userdata
 # langsdorff_decrypt created this link itself, so nothing else removes it
 rm -f /dev/block/mapper/userdata
 umount /vendor "${ROM}" 2>/dev/null

@@ -42,10 +42,12 @@ permissive `p` build.
 ## Decryption
 
 The 12.1 fscrypt code needs a keymaster 4 HIDL HAL, and this firmware only has
-KeyMint AIDL. The recovery therefore mounts the firmware's `system` and
-`vendor` and runs only what talks to the TEE: the TEEGRIS daemons,
-servicemanager, KeyMint and gatekeeper. `langsdorff_decrypt` then unlocks
-three layers itself:
+KeyMint AIDL. The recovery therefore mounts the device's `vendor` and runs
+only what talks to the TEE: the TEEGRIS daemons, servicemanager, KeyMint and
+gatekeeper. Those need Android 15 system libraries, which the recovery carries
+itself in `/system/tee` (taken from A145FXXSEDZF2), so it works the same under
+One UI and GSIs. From the installed ROM it only reads the version and patch
+level in `build.prop`. `langsdorff_decrypt` then unlocks three layers itself:
 
 - **Metadata:** the `metadata_encryption` key, then a dm-default-key device
   for `/data`.

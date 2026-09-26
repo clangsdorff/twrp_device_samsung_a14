@@ -48,7 +48,7 @@ service tee-tzts /vendor/bin/tzts_daemon
     seclabel u:r:recovery:s0
     disabled
 
-service tee-servicemanager /system/bin/hal_run.sh /rom/system/bin/servicemanager
+service tee-servicemanager /system/bin/hal_run.sh /system/tee/bin/servicemanager
     class core
     user root
     group root readproc

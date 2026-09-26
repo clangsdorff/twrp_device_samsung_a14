@@ -3,9 +3,9 @@
 
 TEE_SERVICES="tee-gatekeeper tee-keymint tee-tzts tee-tzdaemon tee-servicemanager"
 
-rom() { /system/bin/hal_run.sh "${ROM}/system/bin/$@"; }
+stock() { /system/bin/hal_run.sh "/system/tee/bin/$@"; }
 
-registered() { rom service check "$1" 2>/dev/null | grep -q ": found"; }
+registered() { stock service check "$1" 2>/dev/null | grep -q ": found"; }
 
 wait_prop() {
     n=0
@@ -38,7 +38,6 @@ done
 rom_mount
 vendor_mount
 echo "rom: $(rom_mounted && echo yes || echo no) vendor: $([ -e /vendor/bin/tzdaemon ] && echo yes || echo no)"
-rom_mounted || return 1
 [ -e /vendor/bin/tzdaemon ] || return 1
 
 mkdir -p /mnt/vendor/efs 2>/dev/null
@@ -99,11 +98,6 @@ XML
     chmod -R 755 /tmp/vintf
     mount -o bind /tmp/vintf /vendor/etc/vintf
 fi
-
-# the ramdisk ships no service_contexts, so servicemanager has no label for the keymint names
-[ -e /plat_service_contexts ] ||
-    cp "${ROM}/system/etc/selinux/plat_service_contexts" /plat_service_contexts 2>/dev/null
-chmod 644 /plat_service_contexts 2>/dev/null
 
 prop_from() { grep -m1 "^$2=" "$1" 2>/dev/null | cut -d= -f2-; }
 RP=/system/bin/resetprop
