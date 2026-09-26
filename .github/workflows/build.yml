@@ -9,10 +9,10 @@ on:
         required: true
       kernel_variant:
         description: Kernel variant (SELinux mode is hardcoded per variant; recovery needs permissive)
-        default: pn
+        default: p
         required: true
         type: choice
-        options: [pn, p]
+        options: [p, pn]
       release_tag:
         description: Also create a draft GitHub release with this tag (empty = none)
         default: ""
@@ -38,7 +38,7 @@ env:
   LUNCH_TARGET: twrp_a14-eng
   KERNEL_REPO: clangsdorff/langsdorffkernel
   KERNEL_VERSION: ${{ inputs.kernel_version || '3.8.4' }}
-  KERNEL_VARIANT: ${{ inputs.kernel_variant || 'pn' }}
+  KERNEL_VARIANT: ${{ inputs.kernel_variant || 'p' }}
   # Fixed path: ccache command lines and the cached .repo depend on it
   WORKDIR: /mnt/twrp
   # Soong runs compile commands in an nsjail sandbox where only the source

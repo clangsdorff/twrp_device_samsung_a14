@@ -7,7 +7,7 @@ TWRP 3.7.1 (`twrp-12.1`) device tree for the Galaxy A14 4G, built with
 |---|---|
 | Device | Samsung Galaxy A14 (`a14`, SM-A145F) |
 | SoC | Exynos 850 (s5e3830), 8x Cortex-A55 |
-| Kernel | langsdorffkernel 5.10 (`pn` variant: permissive, no root, no overclock) |
+| Kernel | langsdorffkernel 5.10 (`p` variant: permissive) |
 | Firmware base | A145FXXSEDZF2 (Android 15 / One UI 7) |
 | Partitions | Non-A/B, dynamic partitions (super), erofs |
 | Recovery | Dedicated `recovery` partition, boot header v2 |
@@ -37,7 +37,7 @@ stock recovery does:
 every build, so the kernel files are never committed.
 
 The SELinux mode is hardcoded in each kernel variant. Recovery uses the
-permissive `pn` build.
+permissive `p` build.
 
 ## Decryption
 

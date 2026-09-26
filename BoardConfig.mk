@@ -34,7 +34,7 @@ TARGET_USES_UEFI := false
 # Assert
 TARGET_OTA_ASSERT_DEVICE := a14,a14nsxx
 
-# Kernel (langsdorffkernel "pn" = permissive, no root / no OC,
+# Kernel (langsdorffkernel "p" = permissive,
 # prepared by scripts/prepare_kernel.py). SELinux mode is hardcoded per
 # kernel variant, so the recovery gets the permissive build.
 # Samsung's recovery partition is a self-contained boot header v2 image:
