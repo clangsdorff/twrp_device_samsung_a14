@@ -7,9 +7,10 @@ cc_binary {
         "libbinder_ndk",
         "libcrypto",
         "liblog",
-        "libsqlite",
     ],
     static_libs: [
+        // a GSI's libsqlite needs ICU symbols from an APEX the recovery cannot load
+        "libsqlite_static_minimal",
         "android.hardware.security.keymint-V1-ndk_platform",
         "android.hardware.security.secureclock-V1-ndk_platform",
     ],
