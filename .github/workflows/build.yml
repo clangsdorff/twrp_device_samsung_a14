@@ -158,7 +158,7 @@ jobs:
           echo "Downloading $ASSET"
           curl -fL --retry 3 -o tmp/kernel.tar "$URL"
           tar -xf tmp/kernel.tar -C tmp
-          for img in boot vendor_boot; do
+          for img in boot vendor_boot vbmeta; do
             [ -f "tmp/$img.img.lz4" ] || { echo "::error::$img.img.lz4 not found in $ASSET"; exit 1; }
             lz4 -d -f -q "tmp/$img.img.lz4" "$img.img"
           done
@@ -242,8 +242,8 @@ jobs:
           NAME="twrp-${VERSION}-a14-langsdorff${KERNEL_VERSION}${KERNEL_VARIANT}-$(date -u +%Y%m%d)"
           mkdir -p "$WORKDIR/dist"
           cp recovery.img "$WORKDIR/dist/$NAME.img"
-          # Odin: a plain tar with recovery.img, md5 appended (.tar.md5)
-          tar -H ustar -cf "$WORKDIR/dist/$NAME.tar" recovery.img
+          # Odin: a plain tar with recovery.img and the kernel release's disabled vbmeta, md5 appended (.tar.md5)
+          tar -H ustar -cf "$WORKDIR/dist/$NAME.tar" recovery.img -C "$KERNEL_DIR" vbmeta.img
           ( cd "$WORKDIR/dist" && md5sum -t "$NAME.tar" >> "$NAME.tar" && mv "$NAME.tar" "$NAME.tar.md5" )
           ( cd "$WORKDIR/dist" && sha256sum * > SHA256SUMS )
           ls -la "$WORKDIR/dist"
