@@ -16,6 +16,10 @@ on boot
     setprop twrp.decrypt.run 1
     # the ramdisk keystore2 cannot reach the firmware KeyMint and restarts every 5 seconds
     stop keystore2
+    # the bootloader passes usb_restrict=1 into recovery, and usb_notify then kills adb, MTP and OTG
+    write /sys/module/usb_notify_layer/parameters/usb_restrict 0
+    # it also withholds OTG until a lock state is reported, which never happens without the framework
+    write /sys/class/usb_notify/usb_control/usb_sl SUNNY_WORK_MODE
 
 on property:twrp.decrypt.run=1
     start decrypt
