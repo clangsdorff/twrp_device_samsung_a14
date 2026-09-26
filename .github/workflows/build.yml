@@ -13,13 +13,17 @@ on:
         required: true
         type: choice
         options: [pn, p]
+      release_tag:
+        description: Also create a draft GitHub release with this tag (empty = none)
+        default: ""
+        required: false
   push:
     branches: [main]
     paths-ignore:
       - "**.md"
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 concurrency:
@@ -280,6 +284,17 @@ jobs:
             cat SHA256SUMS
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Draft release
+        if: inputs.release_tag != ''
+        working-directory: ${{ env.WORKDIR }}/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.release_tag }}" *.tar.md5 *.img SHA256SUMS \
+            -R "${{ github.repository }}" --target "${{ github.sha }}" --draft \
+            --title "${{ inputs.release_tag }}" \
+            --notes "Kernel: langsdorffkernel ${KERNEL_VERSION}${KERNEL_VARIANT}"
 
       - name: Upload build logs
         if: failure()
