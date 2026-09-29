@@ -2,10 +2,10 @@
 . /system/bin/rom_mount.sh
 
 TEE_SERVICES="tee-gatekeeper tee-keymint tee-tzts tee-tzdaemon tee-servicemanager"
+VENDOR_BINS="/vendor/bin/tzdaemon /vendor/bin/tzts_daemon /vendor/bin/hw/android.hardware.security.keymint-service /vendor/bin/hw/android.hardware.gatekeeper@1.0-service"
 
-stock() { /system/bin/hal_run.sh "/system/tee/bin/$@"; }
-
-registered() { stock service check "$1" 2>/dev/null | grep -q ": found"; }
+# libbinder waits forever for a context manager that is not there
+registered() { timeout 3 /system/bin/hal_run.sh /system/tee/bin/service check "$1" 2>/dev/null | grep -q ": found"; }
 
 wait_prop() {
     n=0
@@ -19,26 +19,39 @@ wait_prop() {
 
 wait_service() {
     n=0
-    while [ "${n}" -lt "$2" ]; do
+    while [ "${n}" -lt "$3" ]; do
         registered "$1" && return 0
+        [ "$(getprop "init.svc.$2")" = running ] || return 1
         n=$((n + 1))
         sleep 0.5
     done
     return 1
 }
 
-stack_up() {
+# the recovery maps every logical partition at once, so a vendor missing once system is there never comes
+vendor_ready() {
 n=0
 while [ "${n}" -lt 60 ]; do
-    [ -e /dev/block/mapper/vendor ] && [ -e /dev/block/mapper/system ] && break
+    [ -e /dev/block/mapper/system ] && break
     n=$((n + 1))
     sleep 0.5
 done
 
-rom_mount
 vendor_mount
+missing=""
+for b in ${VENDOR_BINS}; do
+    [ -e "${b}" ] || missing="${missing} ${b}"
+done
+[ -z "${missing}" ] && return 0
+echo "vendor is missing:${missing}"
+echo "skipping decryption"
+umount /vendor 2>/dev/null
+return 1
+}
+
+stack_up() {
+rom_mount
 echo "rom: $(rom_mounted && echo yes || echo no) vendor: $([ -e /vendor/bin/tzdaemon ] && echo yes || echo no)"
-[ -e /vendor/bin/tzdaemon ] || return 1
 
 mkdir -p /mnt/vendor/efs 2>/dev/null
 mount | grep -q ' /mnt/vendor/efs ' ||
@@ -126,18 +139,22 @@ setprop ctl.restart tee-servicemanager
 wait_prop init.svc.tee-servicemanager running 20
 setprop servicemanager.ready true
 echo "servicemanager: $(getprop init.svc.tee-servicemanager)"
+[ "$(getprop init.svc.tee-servicemanager)" = running ] || return 1
 
 setprop ctl.restart tee-tzdaemon
 wait_prop vendor.tzdaemon Ready 30
 echo "tzdaemon: $(getprop vendor.tzdaemon)"
+[ "$(getprop vendor.tzdaemon)" = Ready ] || return 1
 
 setprop ctl.restart tee-tzts
 wait_prop vendor.tzts_daemon Ready 20
 echo "tzts_daemon: $(getprop vendor.tzts_daemon)"
+[ "$(getprop vendor.tzts_daemon)" = Ready ] || return 1
 
 setprop ctl.restart tee-keymint
-wait_service android.hardware.security.keymint.IKeyMintDevice/default 40
+wait_service android.hardware.security.keymint.IKeyMintDevice/default tee-keymint 40
 echo "keymint: $(registered android.hardware.security.keymint.IKeyMintDevice/default && echo registered || echo MISSING)"
+registered android.hardware.security.keymint.IKeyMintDevice/default || return 1
 
 setprop ctl.restart hwservicemanager
 sleep 2

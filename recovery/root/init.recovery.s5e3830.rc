@@ -31,6 +31,7 @@ service watchdogd /system/bin/watchdogd 10 20
     oneshot
     seclabel u:r:watchdogd:s0
 
+# the tee-* services are oneshot: one that cannot run on this vendor would otherwise restart every 5 seconds for good
 # TEEGRIS hashes the exec'd image, so these two must not go through the bootstrap linker
 service tee-tzdaemon /vendor/bin/tzdaemon
     class main
@@ -38,6 +39,7 @@ service tee-tzdaemon /vendor/bin/tzdaemon
     group root system readproc
     setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib64/hw
     seclabel u:r:recovery:s0
+    oneshot
     disabled
 
 service tee-tzts /vendor/bin/tzts_daemon
@@ -46,6 +48,7 @@ service tee-tzts /vendor/bin/tzts_daemon
     group root system
     setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib64/hw
     seclabel u:r:recovery:s0
+    oneshot
     disabled
 
 service tee-servicemanager /system/bin/hal_run.sh /system/tee/bin/servicemanager
@@ -53,6 +56,7 @@ service tee-servicemanager /system/bin/hal_run.sh /system/tee/bin/servicemanager
     user root
     group root readproc
     seclabel u:r:recovery:s0
+    oneshot
     disabled
 
 service tee-keymint /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.security.keymint-service
@@ -60,6 +64,7 @@ service tee-keymint /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.secur
     user root
     group root system drmrpc
     seclabel u:r:recovery:s0
+    oneshot
     disabled
 
 service tee-gatekeeper /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.gatekeeper@1.0-service
@@ -67,6 +72,7 @@ service tee-gatekeeper /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.ga
     user root
     group root system
     seclabel u:r:recovery:s0
+    oneshot
     disabled
 
 # runs before the recovery binary parses the fstab, so one image serves encrypted and plain firmware

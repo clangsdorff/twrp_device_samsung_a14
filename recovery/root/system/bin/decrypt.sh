@@ -21,6 +21,11 @@ if [ ! -e "${KEYDIR}/key/encrypted_key" ]; then
     exit 0
 fi
 
+if ! vendor_ready; then
+    echo "===== decrypt done ====="
+    exit 0
+fi
+
 # the metadata partition holds every KeyMint-wrapped key vold needs; keep a copy to restore from
 [ -s /tmp/metadata-backup.img ] ||
     dd if=/dev/block/by-name/metadata of=/tmp/metadata-backup.img bs=1048576 2>/dev/null
