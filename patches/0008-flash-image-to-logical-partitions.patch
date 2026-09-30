@@ -1,0 +1,119 @@
+diff --git a/partition.cpp b/partition.cpp
+index 4cf1a23..f970244 100755
+--- a/partition.cpp
++++ b/partition.cpp
+@@ -3328,6 +3328,32 @@ bool TWPartition::Flash_Image(PartitionSettings *part_settings) {
+ 
+ 	LOGINFO("Image filename is: %s\n", Backup_FileName.c_str());
+ 
++	if (Is_Super && Can_Flash_Img) {
++		if (Is_Mounted() && !UnMount(true))
++			return false;
++		uint64_t image_size = TWFunc::Get_File_Size(full_filename);
++		bool sparse = Is_Sparse_Image(full_filename);
++		if (sparse) {
++			sparse_header_t header;
++			int fd = open(full_filename.c_str(), O_RDONLY);
++			bool ok = fd >= 0 && read(fd, &header, sizeof(header)) == sizeof(header);
++			if (fd >= 0)
++				close(fd);
++			if (!ok) {
++				LOGERR("Unable to read sparse header of '%s'\n", full_filename.c_str());
++				return false;
++			}
++			image_size = (uint64_t)header.total_blks * header.blk_sz;
++		}
++		if (!PartitionManager.Resize_Super_Volume(this, image_size)) {
++			gui_err("img_size_err=Size of image is larger than target device");
++			return false;
++		}
++		if (sparse)
++			return Flash_Sparse_Image(full_filename);
++		return Raw_Read_Write(part_settings);
++	}
++
+ 	if (Backup_Method == BM_FILES) {
+ 		LOGERR("Cannot flash images to file systems\n");
+ 		return false;
+diff --git a/partitionmanager.cpp b/partitionmanager.cpp
+index 14a1f43..bb00fa6 100755
+--- a/partitionmanager.cpp
++++ b/partitionmanager.cpp
+@@ -3595,6 +3595,65 @@ bool TWPartitionManager::Prepare_Super_Volume(TWPartition* twrpPart) {
+     return true;
+ }
+ 
++bool TWPartitionManager::Resize_Super_Volume(TWPartition* twrpPart, uint64_t size) {
++	std::string bare_partition_name = Get_Bare_Partition_Name(twrpPart->Get_Mount_Point());
++	std::string partition_name = bare_partition_name;
++	uint32_t slot = 0;
++#ifdef AB_OTA_UPDATER
++	partition_name += Get_Active_Slot_Suffix();
++	slot = android::fs_mgr::SlotNumberForSlotSuffix(Get_Active_Slot_Suffix());
++#endif
++	std::string super_device = Get_Super_Partition();
++
++	auto builder = MetadataBuilder::New(super_device, slot);
++	if (!builder) {
++		LOGERR("Unable to read metadata from %s\n", super_device.c_str());
++		return false;
++	}
++	auto partition = builder->FindPartition(partition_name);
++	if (!partition) {
++		LOGERR("%s is not in the super metadata\n", partition_name.c_str());
++		return false;
++	}
++	if (!builder->ResizePartition(partition, size)) {
++		LOGERR("Not enough space in super to resize %s to %llu bytes\n", partition_name.c_str(), (unsigned long long)size);
++		return false;
++	}
++	auto metadata = builder->Export();
++	if (!metadata)
++		return false;
++
++	if (!DestroyLogicalPartition(partition_name)) {
++		LOGERR("Unable to unmap %s\n", partition_name.c_str());
++		return false;
++	}
++	bool updated = true;
++	for (uint32_t i = 0; i < metadata->geometry.metadata_slot_count; i++)
++		updated &= android::fs_mgr::UpdatePartitionTable(super_device, *metadata, i);
++
++	android::fs_mgr::CreateLogicalPartitionParams params;
++	params.block_device = super_device;
++	params.metadata_slot = slot;
++	params.partition_name = partition_name;
++	params.force_writable = true;
++	params.timeout_ms = std::chrono::seconds(10);
++	std::string path;
++	if (!android::fs_mgr::CreateLogicalPartition(params, &path)) {
++		LOGERR("Unable to map %s\n", partition_name.c_str());
++		return false;
++	}
++	twrpPart->Set_Block_Device(path);
++	std::string link = "/dev/block/bootdevice/by-name/" + bare_partition_name;
++	unlink(link.c_str());
++	symlink(path.c_str(), link.c_str());
++
++	if (!updated) {
++		LOGERR("Unable to write metadata to %s\n", super_device.c_str());
++		return false;
++	}
++	return true;
++}
++
+ bool TWPartitionManager::Prepare_All_Super_Volumes() {
+ 	bool status = true;
+ 	std::vector<TWPartition*>::iterator iter;
+diff --git a/partitions.hpp b/partitions.hpp
+index 843dfe5..2267654 100755
+--- a/partitions.hpp
++++ b/partitions.hpp
+@@ -399,6 +399,7 @@ public:
+ 	void Add_Partition(TWPartition* Part);                                    // Adds a new partition to the Partitions vector
+ 	std::string Get_Bare_Partition_Name(std::string Mount_Point);
+     bool Prepare_Super_Volume(TWPartition* twrpPart);					  	  // Prepare logical super partition volume for mounting
++	bool Resize_Super_Volume(TWPartition* twrpPart, uint64_t size);         // Resize a logical partition to size and map it writable
+ 	std::string Get_Super_Partition();										  // Get Super Partition block device path
+ 	void Setup_Super_Devices();												  // Setup logical dm devices on super partition
+ 	bool Get_Super_Status();												  // Return whether device has a super partition

@@ -40,3 +40,8 @@ fails if one no longer applies.
   `/data/media/0` on the first mount that can see it and re-adds the MTP
   storage; the MTP side now replaces a storage it already has under the same
   ID instead of listing it twice.
+- **0008**: Logical partitions never get `Can_Flash_Img`, and even with the
+  `flashimg` flag `Flash_Image` rejects them because their erofs entry backs
+  up as files. The patch sends a logical partition down its own path: it
+  resizes the partition in the super metadata to the image size, like
+  fastbootd, remaps it writable, and writes the image raw or through simg2img.
