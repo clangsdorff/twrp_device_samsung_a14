@@ -28,48 +28,15 @@ wait_service() {
     return 1
 }
 
-# the recovery maps every logical partition at once, so a vendor missing once system is there never comes
-vendor_ready() {
-n=0
-while [ "${n}" -lt 60 ]; do
-    [ -e /dev/block/mapper/system ] && break
-    n=$((n + 1))
-    sleep 0.5
-done
-
-vendor_mount
-missing=""
-for b in ${VENDOR_BINS}; do
-    [ -e "${b}" ] || missing="${missing} ${b}"
-done
-[ -z "${missing}" ] && return 0
-echo "vendor is missing:${missing}"
-echo "skipping decryption"
-umount /vendor 2>/dev/null
-return 1
-}
-
-stack_up() {
-rom_mount
-echo "rom: $(rom_mounted && echo yes || echo no) vendor: $([ -e /vendor/bin/tzdaemon ] && echo yes || echo no)"
-
-mkdir -p /mnt/vendor/efs 2>/dev/null
-mount | grep -q ' /mnt/vendor/efs ' ||
-    mount -t ext4 /dev/block/bootdevice/by-name/efs /mnt/vendor/efs 2>/dev/null
-mkdir -p /mnt/vendor/efs/tee /dev/socket/iwt/ca 2>/dev/null
-chmod 0770 /dev/socket/iwt /dev/socket/iwt/ca 2>/dev/null
-
-# /odm/etc -> /vendor/odm/etc -> /odm is a symlink loop, and libvintf fails the whole device manifest on it
-if [ -L /odm/etc ]; then
-    rm -f /odm/etc
-    mkdir -p /odm/etc/vintf
-fi
-
-# libvintf 4.0 rejects the vendor manifest whole over its version 8.0 and the radio HALs' <version>202404</version>
-if ! mount | grep -q ' /vendor/etc/vintf '; then
-    rm -rf /tmp/vintf
-    mkdir -p /tmp/vintf/manifest
-    cat > /tmp/vintf/manifest.xml <<'XML'
+# libvintf 4.0 rejects the vendor manifest whole over its version 8.0 and the radio HALs' <version>202404</version>.
+# The bind also keeps /vendor busy: the recovery mounts it on its own while it starts and unmounts whatever is there when done
+vendor_pin() {
+grep -q ' /vendor/etc/vintf ' /proc/mounts && [ -e /vendor/bin/tzdaemon ] && return 0
+umount /vendor/etc/vintf 2>/dev/null
+vendor_mount || return 1
+rm -rf /tmp/vintf
+mkdir -p /tmp/vintf/manifest
+cat > /tmp/vintf/manifest.xml <<'XML'
 <manifest version="1.0" type="device" target-level="6">
     <hal format="hidl" override="true">
         <name>android.hardware.gatekeeper</name>
@@ -106,10 +73,61 @@ if ! mount | grep -q ' /vendor/etc/vintf '; then
     </hal>
 </manifest>
 XML
-    sed -e 's/version="8.0"/version="1.0"/g' -e 's/level="[0-9]*"/level="6"/g' \
-        /vendor/etc/vintf/compatibility_matrix.xml > /tmp/vintf/compatibility_matrix.xml 2>/dev/null
-    chmod -R 755 /tmp/vintf
-    mount -o bind /tmp/vintf /vendor/etc/vintf
+sed -e 's/version="8.0"/version="1.0"/g' -e 's/level="[0-9]*"/level="6"/g' \
+    /vendor/etc/vintf/compatibility_matrix.xml > /tmp/vintf/compatibility_matrix.xml 2>/dev/null
+chmod -R 755 /tmp/vintf
+mount -o bind /tmp/vintf /vendor/etc/vintf && [ -e /vendor/bin/tzdaemon ]
+}
+
+# the recovery maps every logical partition at once, so a vendor missing once system is there never comes;
+# twrp.crash_counter is set once the recovery is past its fstab, which mounts /vendor and unmounts it again
+vendor_ready() {
+n=0
+while [ "${n}" -lt 60 ]; do
+    [ -e /dev/block/mapper/system ] && [ -n "$(getprop twrp.crash_counter)" ] && break
+    n=$((n + 1))
+    sleep 0.5
+done
+
+vendor_mount
+missing=""
+for b in ${VENDOR_BINS}; do
+    [ -e "${b}" ] || missing="${missing} ${b}"
+done
+if [ -n "${missing}" ]; then
+    echo "vendor is missing:${missing}"
+    echo "skipping decryption"
+    umount /vendor 2>/dev/null
+    return 1
+fi
+
+n=0
+until vendor_pin; do
+    n=$((n + 1))
+    if [ "${n}" -ge 10 ]; then
+        echo "vendor cannot be kept mounted"
+        umount /vendor/etc/vintf 2>/dev/null
+        umount /vendor 2>/dev/null
+        return 1
+    fi
+    sleep 0.5
+done
+}
+
+stack_up() {
+rom_mount
+echo "rom: $(rom_mounted && echo yes || echo no) vendor: $([ -e /vendor/bin/tzdaemon ] && echo yes || echo no)"
+
+mkdir -p /mnt/vendor/efs 2>/dev/null
+mount | grep -q ' /mnt/vendor/efs ' ||
+    mount -t ext4 /dev/block/bootdevice/by-name/efs /mnt/vendor/efs 2>/dev/null
+mkdir -p /mnt/vendor/efs/tee /dev/socket/iwt/ca 2>/dev/null
+chmod 0770 /dev/socket/iwt /dev/socket/iwt/ca 2>/dev/null
+
+# /odm/etc -> /vendor/odm/etc -> /odm is a symlink loop, and libvintf fails the whole device manifest on it
+if [ -L /odm/etc ]; then
+    rm -f /odm/etc
+    mkdir -p /odm/etc/vintf
 fi
 
 prop_from() { grep -m1 "^$2=" "$1" 2>/dev/null | cut -d= -f2-; }
