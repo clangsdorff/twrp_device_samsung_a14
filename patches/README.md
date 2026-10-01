@@ -46,3 +46,8 @@ fails if one no longer applies.
   up as files. The patch sends a logical partition down its own path: it
   resizes the partition in the super metadata to the image size, like
   fastbootd, remaps it writable, and writes the image raw or through simg2img.
+  An empty image or a bad sparse header is refused before the metadata is
+  touched, since a partition resized to 0 cannot be mapped again. Only the
+  metadata slot in use is written; the other slot of this super holds an older
+  table. `Flash_Sparse_Image` now returns simg2img's result instead of always
+  succeeding.

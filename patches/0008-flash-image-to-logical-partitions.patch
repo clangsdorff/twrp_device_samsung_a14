@@ -1,45 +1,60 @@
 diff --git a/partition.cpp b/partition.cpp
-index 4cf1a23..f970244 100755
+index 184cb16..e4eea85 100755
 --- a/partition.cpp
 +++ b/partition.cpp
-@@ -3328,6 +3328,32 @@ bool TWPartition::Flash_Image(PartitionSettings *part_settings) {
+@@ -3303,6 +3303,37 @@ bool TWPartition::Flash_Image(PartitionSettings *part_settings) {
  
  	LOGINFO("Image filename is: %s\n", Backup_FileName.c_str());
  
-+	if (Is_Super && Can_Flash_Img) {
++	if (Is_Super && Can_Flash_Img && !part_settings->adbbackup) {
 +		if (Is_Mounted() && !UnMount(true))
 +			return false;
 +		uint64_t image_size = TWFunc::Get_File_Size(full_filename);
-+		bool sparse = Is_Sparse_Image(full_filename);
-+		if (sparse) {
-+			sparse_header_t header;
-+			int fd = open(full_filename.c_str(), O_RDONLY);
-+			bool ok = fd >= 0 && read(fd, &header, sizeof(header)) == sizeof(header);
-+			if (fd >= 0)
-+				close(fd);
-+			if (!ok) {
-+				LOGERR("Unable to read sparse header of '%s'\n", full_filename.c_str());
-+				return false;
-+			}
-+			image_size = (uint64_t)header.total_blks * header.blk_sz;
-+		}
-+		if (!PartitionManager.Resize_Super_Volume(this, image_size)) {
-+			gui_err("img_size_err=Size of image is larger than target device");
++		bool sparse = false;
++		sparse_header_t header;
++		int fd = open(full_filename.c_str(), O_RDONLY);
++		if (fd < 0) {
++			gui_msg(Msg(msg::kError, "error_opening_strerr=Error opening: '{1}' ({2})")(full_filename)(strerror(errno)));
 +			return false;
 +		}
-+		if (sparse)
-+			return Flash_Sparse_Image(full_filename);
-+		return Raw_Read_Write(part_settings);
++		if (read(fd, &header, sizeof(header)) == sizeof(header) && header.magic == SPARSE_HEADER_MAGIC) {
++			sparse = true;
++			image_size = (uint64_t)header.total_blks * header.blk_sz;
++			if (header.major_version != 1 || header.file_hdr_sz < sizeof(header) || header.blk_sz == 0 || header.blk_sz % 4)
++				image_size = 0;
++		}
++		close(fd);
++		// a partition resized to 0 has no extents left and cannot be mapped again
++		if (image_size == 0) {
++			LOGERR("'%s' is empty or not a valid image\n", Backup_FileName.c_str());
++			return false;
++		}
++		if (!PartitionManager.Resize_Super_Volume(this, image_size))
++			return false;
++		bool ret = sparse ? Flash_Sparse_Image(full_filename) : Raw_Read_Write(part_settings);
++		if (ret)
++			Update_Size(false);
++		return ret;
 +	}
 +
  	if (Backup_Method == BM_FILES) {
  		LOGERR("Cannot flash images to file systems\n");
  		return false;
+@@ -3367,8 +3398,7 @@ bool TWPartition::Flash_Sparse_Image(const string& Filename) {
+ 
+ 	Command = "simg2img '" + Filename + "' '" + Actual_Block_Device + "'";
+ 	LOGINFO("Flash command: '%s'\n", Command.c_str());
+-	TWFunc::Exec_Cmd(Command);
+-	return true;
++	return TWFunc::Exec_Cmd(Command) == 0;
+ }
+ 
+ bool TWPartition::Flash_Image_FI(const string& Filename, ProgressTracking *progress) {
 diff --git a/partitionmanager.cpp b/partitionmanager.cpp
-index 14a1f43..bb00fa6 100755
+index 2766b4c..5d609b0 100755
 --- a/partitionmanager.cpp
 +++ b/partitionmanager.cpp
-@@ -3595,6 +3595,65 @@ bool TWPartitionManager::Prepare_Super_Volume(TWPartition* twrpPart) {
+@@ -3595,6 +3595,77 @@ bool TWPartitionManager::Prepare_Super_Volume(TWPartition* twrpPart) {
      return true;
  }
  
@@ -64,21 +79,32 @@ index 14a1f43..bb00fa6 100755
 +		return false;
 +	}
 +	if (!builder->ResizePartition(partition, size)) {
-+		LOGERR("Not enough space in super to resize %s to %llu bytes\n", partition_name.c_str(), (unsigned long long)size);
++		LOGINFO("Not enough space in super to resize %s to %llu bytes\n", partition_name.c_str(), (unsigned long long)size);
++		gui_err("img_size_err=Size of image is larger than target device");
 +		return false;
 +	}
 +	auto metadata = builder->Export();
-+	if (!metadata)
-+		return false;
-+
-+	if (!DestroyLogicalPartition(partition_name)) {
-+		LOGERR("Unable to unmap %s\n", partition_name.c_str());
++	if (!metadata) {
++		LOGERR("Unable to build new metadata for %s\n", partition_name.c_str());
 +		return false;
 +	}
-+	bool updated = true;
-+	for (uint32_t i = 0; i < metadata->geometry.metadata_slot_count; i++)
-+		updated &= android::fs_mgr::UpdatePartitionTable(super_device, *metadata, i);
 +
++	// only replace a link this recovery made, never a by-name entry for a physical partition
++	std::string link = "/dev/block/bootdevice/by-name/" + bare_partition_name;
++	char target[PATH_MAX];
++	ssize_t len = readlink(link.c_str(), target, sizeof(target) - 1);
++	bool own_link = len < 0 ? errno == ENOENT : std::string(target, len) == twrpPart->Actual_Block_Device;
++
++	if (!DestroyLogicalPartition(partition_name)) {
++		LOGERR("Unable to unmap %s, it is still in use\n", partition_name.c_str());
++		return false;
++	}
++	// like fastbootd, only the slot in use: the other metadata slots of a non-A/B super hold stale tables
++	bool updated = android::fs_mgr::UpdatePartitionTable(super_device, *metadata, slot);
++	if (!updated)
++		LOGERR("Unable to write metadata to %s\n", super_device.c_str());
++
++	// maps the new table, or the old one again when it was not written
 +	android::fs_mgr::CreateLogicalPartitionParams params;
 +	params.block_device = super_device;
 +	params.metadata_slot = slot;
@@ -87,19 +113,20 @@ index 14a1f43..bb00fa6 100755
 +	params.timeout_ms = std::chrono::seconds(10);
 +	std::string path;
 +	if (!android::fs_mgr::CreateLogicalPartition(params, &path)) {
-+		LOGERR("Unable to map %s\n", partition_name.c_str());
++		LOGERR("Unable to map %s, reboot the recovery before using it\n", partition_name.c_str());
++		// the old dm node may be handed to another device
++		if (own_link)
++			unlink(link.c_str());
++		twrpPart->Set_Block_Device("");
 +		return false;
 +	}
 +	twrpPart->Set_Block_Device(path);
-+	std::string link = "/dev/block/bootdevice/by-name/" + bare_partition_name;
-+	unlink(link.c_str());
-+	symlink(path.c_str(), link.c_str());
-+
-+	if (!updated) {
-+		LOGERR("Unable to write metadata to %s\n", super_device.c_str());
-+		return false;
++	if (own_link) {
++		unlink(link.c_str());
++		if (symlink(path.c_str(), link.c_str()) != 0)
++			LOGINFO("Unable to link %s to %s\n", link.c_str(), path.c_str());
 +	}
-+	return true;
++	return updated;
 +}
 +
  bool TWPartitionManager::Prepare_All_Super_Volumes() {
