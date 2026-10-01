@@ -3,11 +3,14 @@ export TMPDIR=/tmp
 exec >>/tmp/decrypt.log 2>&1
 . /system/bin/decrypt_stack.sh
 
-echo "===== decrypt_user, credential given: $([ -n "$1" ] && echo yes || echo no) ====="
+CREDENTIAL="${TW_CRYPTO_PASSWORD}"
+unset TW_CRYPTO_PASSWORD
+
+echo "===== decrypt_user, credential given: $([ -n "${CREDENTIAL}" ] && echo yes || echo no) ====="
 vendor_ready || exit 1
 stack_up || { stack_down; exit 1; }
 
-/system/bin/hal_run.sh /system/bin/langsdorff_decrypt ce "$1"
+/system/bin/hal_run.sh /system/bin/langsdorff_decrypt ce "${CREDENTIAL}"
 rc=$?
 echo "ce exit: ${rc}"
 
