@@ -159,11 +159,14 @@ setprop servicemanager.ready true
 echo "servicemanager: $(getprop init.svc.tee-servicemanager)"
 [ "$(getprop init.svc.tee-servicemanager)" = running ] || return 1
 
+# both readiness properties outlive their daemons, and a Ready left from the last run would pass before the new one is up
+setprop vendor.tzdaemon ""
 setprop ctl.restart tee-tzdaemon
 wait_prop vendor.tzdaemon Ready 30
 echo "tzdaemon: $(getprop vendor.tzdaemon)"
 [ "$(getprop vendor.tzdaemon)" = Ready ] || return 1
 
+setprop vendor.tzts_daemon ""
 setprop ctl.restart tee-tzts
 wait_prop vendor.tzts_daemon Ready 20
 echo "tzts_daemon: $(getprop vendor.tzts_daemon)"
