@@ -54,28 +54,11 @@ if grep -q " ${ANCHOR} " /proc/mounts; then
     echo "userdata mounted: $(grep " ${ANCHOR} " /proc/mounts)"
     decrypt de && decrypt ce
     echo "ce exit: $?"
-    # the recovery mounts /data from the mapper itself and then sets up /sdcard and MTP
-    grep -q ' /data ' /proc/mounts || /system/bin/twrp mount /data >/dev/null 2>&1
-    grep -q ' /data ' /proc/mounts || mount --bind "${ANCHOR}" /data
 else
     echo "userdata not mounted"
 fi
 
-# the recovery decided /data was encrypted before this script mounted it, and its own
-# decrypt path cannot clear the flag on this device
-if [ -d /data/media/0/Android ] || [ -d /data/data/android ]; then
-    /system/bin/twrp set tw_is_encrypted 0 >/dev/null 2>&1
-elif [ -s /tmp/.ce_pwtype ]; then
-    /system/bin/twrp set tw_crypto_pwtype_0 "$(cat /tmp/.ce_pwtype)" >/dev/null 2>&1
-    # Set_FBE_Status marks /data decrypted once the metadata layer is up, which hides Decrypt Data
-    /system/bin/twrp set tw_is_decrypted 0 >/dev/null 2>&1
-fi
-
-# /sdcard was set up as a bare ramdisk directory because /data was not mounted yet
-if [ -d /data/media/0 ] && ! grep -q " /sdcard " /proc/mounts; then
-    mount -o bind /data/media/0 /sdcard
-fi
-
+# the recovery waits in Decrypt_Data for this script to exit and mounts /data itself
 echo "----- log -----"
 logcat -d 2>/dev/null | grep -iE 'keymint|langsdorff_decrypt|teegris|tzdaemon|servicemanager|vintf' | tail -60
 

@@ -51,3 +51,10 @@ fails if one no longer applies.
   metadata slot in use is written; the other slot of this super holds an older
   table. `Flash_Sparse_Image` now returns simg2img's result instead of always
   succeeding.
+- **0009**: `Decrypt_Data` calls vold's `fscrypt_mount_metadata_encrypted`,
+  which waits 30 s for a keystore2 that cannot reach the firmware KeyMint and
+  then fails, all on the splash screen. `decrypt.sh` could only start once the
+  recovery was past that, and then mounted `/data` through ORS, which flashed
+  the action page over the main screen. The patch signals `decrypt.sh` with
+  `twrp.fstab.done` once `/vendor` is free, waits on the splash for it to exit,
+  mounts `/data` from the mapper and sets the encryption state itself.

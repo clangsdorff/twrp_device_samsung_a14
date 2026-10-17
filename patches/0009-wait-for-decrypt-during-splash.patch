@@ -1,0 +1,27 @@
+--- a/partitionmanager.cpp
++++ b/partitionmanager.cpp
+@@ -588,6 +588,24 @@ void TWPartitionManager::Decrypt_Data() {
+ 	TWPartition* Decrypt_Data = Find_Partition_By_Path("/data");
+ 	if (Decrypt_Data && Decrypt_Data->Is_Encrypted && !Decrypt_Data->Is_Decrypted) {
+ 		Set_Crypto_State();
++		if (TWFunc::Path_Exists("/system/bin/decrypt.sh")) {
++			// vold below cannot reach the firmware KeyMint and waits 30 s for keystore2; decrypt.sh
++			// mounts /vendor once the fstab is done with it, and cannot use ORS before the GUI runs
++			Set_Crypto_Type("file");
++			property_set("twrp.fstab.done", "1");
++			for (int i = 0; i < 1200 && android::base::GetProperty("init.svc.decrypt", "") != "stopped"; i++)
++				usleep(100000);
++			if (Decrypt_Data->Mount(false)) {
++				string pwtype;
++				if (TWFunc::Path_Exists("/data/media/0/Android") || TWFunc::Path_Exists("/data/data/android")) {
++					DataManager::SetValue(TW_IS_ENCRYPTED, 0);
++				} else if (TWFunc::read_file("/tmp/.ce_pwtype", pwtype) == 0 && !pwtype.empty()) {
++					DataManager::SetValue("tw_crypto_pwtype_0", pwtype);
++					DataManager::SetValue(TW_IS_DECRYPTED, 0);
++				}
++			}
++			return;
++		}
+ 		TWPartition* Key_Directory_Partition = Find_Partition_By_Path(Decrypt_Data->Key_Directory);
+ 		if (Key_Directory_Partition != nullptr)
+ 			if (!Key_Directory_Partition->Is_Mounted())

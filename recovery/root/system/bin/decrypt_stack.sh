@@ -80,11 +80,11 @@ mount -o bind /tmp/vintf /vendor/etc/vintf && [ -e /vendor/bin/tzdaemon ]
 }
 
 # the recovery maps every logical partition at once, so a vendor missing once system is there never comes;
-# twrp.crash_counter is set once the recovery is past its fstab, which mounts /vendor and unmounts it again
+# twrp.fstab.done is set once the recovery is past its fstab, which mounts /vendor and unmounts it again
 vendor_ready() {
 n=0
 while [ "${n}" -lt 60 ]; do
-    [ -e /dev/block/mapper/system ] && [ -n "$(getprop twrp.crash_counter)" ] && break
+    [ -e /dev/block/mapper/system ] && [ "$(getprop twrp.fstab.done)" = 1 ] && break
     n=$((n + 1))
     sleep 0.5
 done
