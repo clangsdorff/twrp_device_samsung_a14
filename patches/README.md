@@ -69,3 +69,8 @@ fails if one no longer applies.
   restore `th_read` sized the policy copy by a version field malloc left
   uninitialized, so only part of the policy came back; it now takes the
   version from the header first.
+- **0011**: a zip's updater unmounts `/data` but not the `/sdcard` bind, which
+  `Is_Mounted` still counts as `/data` being mounted, so the recovery never
+  mounts it again and every size after the flash reads 0. `Mount` now tells a
+  stale bind from a mounted `/data`, mounts `/data` writable and replaces the
+  bind only after that, since the old bind is what keeps the fscrypt keys.

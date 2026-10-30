@@ -130,6 +130,10 @@ TW_DEFAULT_LANGUAGE := en
 TW_BRIGHTNESS_PATH := "/sys/class/backlight/panel/brightness"
 TW_MAX_BRIGHTNESS := 255
 TW_DEFAULT_BRIGHTNESS := 128
+# the centered clock sits under the waterdrop notch, the corners clip the outer items
+TW_CUSTOM_CPU_POS := 70
+TW_CUSTOM_CLOCK_POS := 320
+TW_CUSTOM_BATTERY_POS := 770
 TW_HAS_DOWNLOAD_MODE := true
 TW_NO_REBOOT_BOOTLOADER := true
 TW_USE_TOOLBOX := true

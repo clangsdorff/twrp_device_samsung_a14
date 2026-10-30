@@ -1,0 +1,34 @@
+diff --git a/partition.cpp b/partition.cpp
+index a912afa..b262309 100644
+--- a/partition.cpp
++++ b/partition.cpp
+@@ -1586,9 +1586,18 @@ bool TWPartition::Is_File_System_Writable(void) {
+ bool TWPartition::Mount(bool Display_Error) {
+ 	int exfat_mounted = 0;
+ 	unsigned int flags = Mount_Flags;
++	bool stale_bind = false;
+ 
+ 	if (Is_Mounted()) {
+-		return true;
++		// a zip's updater can unmount /data and leave the /sdcard bind behind, which
++		// Is_Mounted counts as mounted; mount /data again, writable like the bind, and
++		// replace the bind below
++		struct stat st1, st2;
++		if (Symlink_Mount_Point.empty() || stat((Mount_Point + "/.").c_str(), &st1) != 0 ||
++				stat((Mount_Point + "/../.").c_str(), &st2) != 0 || st1.st_dev != st2.st_dev)
++			return true;
++		stale_bind = true;
++		Mount_Read_Only = false;
+ 	} else if (!Can_Be_Mounted) {
+ 		return false;
+ 	}
+@@ -1732,6 +1741,9 @@ bool TWPartition::Mount(bool Display_Error) {
+ 	}
+ 
+ 	if (!Symlink_Mount_Point.empty()) {
++		// the old bind kept the superblock and its fscrypt keys alive until /data was back
++		if (stale_bind)
++			umount2(Symlink_Mount_Point.c_str(), MNT_DETACH);
+ 		if (!Bind_Mount(false))
+ 			return false;
+ 	}

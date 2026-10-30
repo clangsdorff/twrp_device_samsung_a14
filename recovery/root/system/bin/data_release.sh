@@ -4,6 +4,8 @@ exec >>/tmp/decrypt.log 2>&1
 . /system/bin/rom_mount.sh
 
 echo "===== data_release ====="
+setprop ctl.stop userdata-hold
+sleep 1
 for m in /sdcard /data /tmp/.userdata; do
     grep -q " ${m} " /proc/mounts && umount "${m}"
 done

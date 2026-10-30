@@ -90,3 +90,11 @@ service decrypt /system/bin/decrypt.sh
     seclabel u:r:recovery:s0
     oneshot
     disabled
+
+# keeps the userdata anchor busy so nothing short of data_release.sh unmounts it
+service userdata-hold /system/bin/sh -c "cd /tmp/.userdata && exec sleep 2147483647"
+    user root
+    group root
+    seclabel u:r:recovery:s0
+    oneshot
+    disabled

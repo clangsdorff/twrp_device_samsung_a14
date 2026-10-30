@@ -52,6 +52,8 @@ fi
 
 if grep -q " ${ANCHOR} " /proc/mounts; then
     echo "userdata mounted: $(grep " ${ANCHOR} " /proc/mounts)"
+    # a zip's updater unmounts every userdata mount it can, a busy anchor survives it
+    setprop ctl.start userdata-hold
     decrypt de && decrypt ce
     echo "ce exit: $?"
 else
