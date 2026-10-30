@@ -57,4 +57,15 @@ fails if one no longer applies.
   recovery was past that, and then mounted `/data` through ORS, which flashed
   the action page over the main screen. The patch signals `decrypt.sh` with
   `twrp.fstab.done` once `/vendor` is free, waits on the splash for it to exit,
-  mounts `/data` from the mapper and sets the encryption state itself.
+  mounts `/data` from the mapper and sets the encryption state itself, from
+  the keys `langsdorff_decrypt` installed rather than from what `/data` shows:
+  a restored backup can leave plaintext CE directories behind.
+- **0010**: libtar names each directory's fscrypt policy in a backup by looking
+  its key up in the maps the recovery's own fscrypt code fills, and maps the
+  name back on restore. That code never runs here, so every policy was dropped
+  from the backup and restored directories came back unencrypted. The patch
+  looks the keys up in `/tmp/.fscrypt_refs` first, which `langsdorff_decrypt`
+  writes as it installs each key, under the names the recovery uses. On
+  restore `th_read` sized the policy copy by a version field malloc left
+  uninitialized, so only part of the policy came back; it now takes the
+  version from the header first.

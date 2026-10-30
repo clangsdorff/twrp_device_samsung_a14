@@ -1,6 +1,6 @@
 --- a/partitionmanager.cpp
 +++ b/partitionmanager.cpp
-@@ -588,6 +588,24 @@ void TWPartitionManager::Decrypt_Data() {
+@@ -588,6 +588,26 @@ void TWPartitionManager::Decrypt_Data() {
  	TWPartition* Decrypt_Data = Find_Partition_By_Path("/data");
  	if (Decrypt_Data && Decrypt_Data->Is_Encrypted && !Decrypt_Data->Is_Decrypted) {
  		Set_Crypto_State();
@@ -12,8 +12,10 @@
 +			for (int i = 0; i < 1200 && android::base::GetProperty("init.svc.decrypt", "") != "stopped"; i++)
 +				usleep(100000);
 +			if (Decrypt_Data->Mount(false)) {
-+				string pwtype;
-+				if (TWFunc::Path_Exists("/data/media/0/Android") || TWFunc::Path_Exists("/data/data/android")) {
++				// a restored backup can leave plaintext CE directories, so go by the keys decrypt.sh installed
++				string refs, pwtype;
++				TWFunc::read_file("/tmp/.fscrypt_refs", refs);
++				if (refs.compare(0, 4, "CE0 ") == 0 || refs.find("\nCE0 ") != string::npos) {
 +					DataManager::SetValue(TW_IS_ENCRYPTED, 0);
 +				} else if (TWFunc::read_file("/tmp/.ce_pwtype", pwtype) == 0 && !pwtype.empty()) {
 +					DataManager::SetValue("tw_crypto_pwtype_0", pwtype);

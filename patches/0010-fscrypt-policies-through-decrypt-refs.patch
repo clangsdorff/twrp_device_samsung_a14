@@ -1,0 +1,129 @@
+diff --git a/libtar/append.c b/libtar/append.c
+index 225ae1a..9d9d291 100644
+--- a/libtar/append.c
++++ b/libtar/append.c
+@@ -40,6 +40,7 @@
+ 
+ #ifdef USE_FSCRYPT
+ #include "fscrypt_policy.h"
++#include "fscrypt_refs.h"
+ #endif
+ 
+ #include "android_utils.h"
+@@ -165,7 +166,12 @@ tar_append_file(TAR *t, const char *realname, const char *savename)
+ 			char policy_hex[hex_size];
+ 			memset(tar_policy, 0, sizeof(tar_policy));
+ 			bytes_to_hex(descriptor, size, policy_hex);
+-			if (lookup_ref_key(t->th_buf.fep,  &tar_policy[0])) {
++			if (t->th_buf.fep->version == FSCRYPT_POLICY_V2 && size == FSCRYPT_REFS_ID_SIZE &&
++					fscrypt_refs_name(descriptor, (char *) tar_policy + 1, size - 1)) {
++				tar_policy[0] = '0' + t->th_buf.fep->version;
++				memcpy(descriptor, tar_policy, size);
++				LOG("found fscrypt policy '%s' - '%s' - '%s'\n", realname, descriptor, policy_hex);
++			} else if (lookup_ref_key(t->th_buf.fep,  &tar_policy[0])) {
+ 				if (strncmp((char *) tar_policy, user_ce, sizeof(user_ce) - 1) == 0 
+ 				|| strncmp((char *) tar_policy, user_de, sizeof(user_de) - 1) == 0 
+ 				|| strncmp((char *) tar_policy, system_de, sizeof(system_de)) == 0) {
+diff --git a/libtar/block.c b/libtar/block.c
+index aaedc8e..c6abbd4 100644
+--- a/libtar/block.c
++++ b/libtar/block.c
+@@ -362,6 +362,8 @@ th_read(TAR *t)
+ 				start += FSCRYPT_TAG_LEN;
+ 				if (*start == '0') {
+ 					start++;
++					// the size depends on the version, which malloc left uninitialized
++					t->th_buf.fep->version = *(uint8_t *) start;
+ 					memcpy(get_policy(t->th_buf.fep), start, fscrypt_policy_size(t->th_buf.fep));
+ #ifdef DEBUG
+ 					uint8_t version;
+diff --git a/libtar/extract.c b/libtar/extract.c
+index be989b0..da56ef1 100644
+--- a/libtar/extract.c
++++ b/libtar/extract.c
+@@ -37,6 +37,7 @@
+ 
+ #ifdef USE_FSCRYPT
+ #include "fscrypt_policy.h"
++#include "fscrypt_refs.h"
+ #endif
+ 
+ #ifdef TW_LIBTAR_DEBUG
+@@ -570,7 +571,10 @@ tar_extract_dir(TAR *t, const char *realname)
+ 		uint8_t binary_policy[size];
+ 		memset(&binary_policy, 0, size);
+ 
+-		if (!lookup_ref_tar(t->th_buf.fep, &binary_policy[0])) {
++		char ref_name[FSCRYPT_REFS_ID_SIZE];
++		snprintf(ref_name, sizeof(ref_name), "%.*s", (int) size - 1, (char *) descriptor + 1);
++		if (!(size == FSCRYPT_REFS_ID_SIZE && fscrypt_refs_id(ref_name, &binary_policy[0])) &&
++				!lookup_ref_tar(t->th_buf.fep, &binary_policy[0])) {
+ 			LOG("error looking up fscrypt policy for '%s' - %s\n", realname, descriptor);
+ 			policy_lookup_error = true;
+ 		}
+diff --git a/libtar/fscrypt_refs.h b/libtar/fscrypt_refs.h
+new file mode 100644
+index 0000000..d2f0783
+--- /dev/null
++++ b/libtar/fscrypt_refs.h
+@@ -0,0 +1,60 @@
++#ifndef FSCRYPT_REFS_H
++#define FSCRYPT_REFS_H
++
++#include <stdint.h>
++#include <stdio.h>
++#include <string.h>
++
++/* written by langsdorff_decrypt as "<DK|DE<user>|CE<user>> <key identifier hex>" for each key it installs */
++#define FSCRYPT_REFS "/tmp/.fscrypt_refs"
++#define FSCRYPT_REFS_ID_SIZE 16
++
++static inline int fscrypt_refs_parse(const char *hex, uint8_t *id)
++{
++	int i;
++	unsigned int b;
++
++	for (i = 0; i < FSCRYPT_REFS_ID_SIZE; i++) {
++		if (sscanf(hex + 2 * i, "%2x", &b) != 1)
++			return 0;
++		id[i] = (uint8_t)b;
++	}
++	return 1;
++}
++
++/* key identifier -> "DK", "DE0", "CE0" */
++static inline int fscrypt_refs_name(const uint8_t *id, char *name, size_t len)
++{
++	char n[16], h[2 * FSCRYPT_REFS_ID_SIZE + 1];
++	uint8_t cur[FSCRYPT_REFS_ID_SIZE];
++	FILE *f = fopen(FSCRYPT_REFS, "r");
++	int found = 0;
++
++	if (!f)
++		return 0;
++	while (!found && fscanf(f, "%15s %32s", n, h) == 2)
++		if (fscrypt_refs_parse(h, cur) && memcmp(cur, id, FSCRYPT_REFS_ID_SIZE) == 0) {
++			snprintf(name, len, "%s", n);
++			found = 1;
++		}
++	fclose(f);
++	return found;
++}
++
++/* "DK", "DE0", "CE0" -> key identifier */
++static inline int fscrypt_refs_id(const char *name, uint8_t *id)
++{
++	char n[16], h[2 * FSCRYPT_REFS_ID_SIZE + 1];
++	FILE *f = fopen(FSCRYPT_REFS, "r");
++	int found = 0;
++
++	if (!f)
++		return 0;
++	while (!found && fscanf(f, "%15s %32s", n, h) == 2)
++		if (strcmp(n, name) == 0)
++			found = fscrypt_refs_parse(h, id);
++	fclose(f);
++	return found;
++}
++
++#endif

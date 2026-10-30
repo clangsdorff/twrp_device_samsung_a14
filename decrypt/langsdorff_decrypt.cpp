@@ -92,6 +92,7 @@ const size_t kHashPersonLen = 128;  // SHA512_CBLOCK
 
 // userdata stays mounted here for as long as the recovery runs, whatever it does to /data
 #define DATA_ROOT "/tmp/.userdata"
+#define FSCRYPT_REFS "/tmp/.fscrypt_refs"
 const char* kMetadataKeyDir = "/metadata/vold/metadata_encryption/key";
 const char* kSystemDeKeyDir = DATA_ROOT "/unencrypted/key";
 const char* kUser0DeKeyDir = DATA_ROOT "/misc/vold/user_keys/de/0";
@@ -313,7 +314,7 @@ Exit retrieveKey(KeyMint& km, const std::string& dir, const std::vector<uint8_t>
     return km.gcmDecrypt(blob, appId, encrypted, std::nullopt, key);
 }
 
-bool addFscryptKey(const std::vector<uint8_t>& raw, const char* what) {
+bool addFscryptKey(const std::vector<uint8_t>& raw, const char* what, const char* ref) {
     int dfd = open(DATA_ROOT, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dfd < 0) {
         LINE("  open(" DATA_ROOT "): %s", strerror(errno));
@@ -330,7 +331,14 @@ bool addFscryptKey(const std::vector<uint8_t>& raw, const char* what) {
         LINE("  FS_IOC_ADD_ENCRYPTION_KEY (%s): %s", what, strerror(errno));
         return false;
     }
-    LINE("  %s key installed, id %s", what, hex(arg->key_spec.u.identifier, 16).c_str());
+    std::string id = hex(arg->key_spec.u.identifier, 16);
+    LINE("  %s key installed, id %s", what, id.c_str());
+    // the recovery's own fscrypt code never runs here, so libtar maps backup policy names through this
+    FILE* f = fopen(FSCRYPT_REFS, "a");
+    if (f) {
+        fprintf(f, "%s %s\n", ref, id.c_str());
+        fclose(f);
+    }
     return true;
 }
 
@@ -440,12 +448,13 @@ int cmdDe(KeyMint& km) {
     struct {
         const char* dir;
         const char* what;
-    } keys[] = {{kSystemDeKeyDir, "system DE"}, {kUser0DeKeyDir, "user 0 DE"}};
+        const char* ref;
+    } keys[] = {{kSystemDeKeyDir, "system DE", "DK"}, {kUser0DeKeyDir, "user 0 DE", "DE0"}};
     for (auto& k : keys) {
         std::vector<uint8_t> key;
         Exit e = retrieveKey(km, k.dir, {}, &key);
         if (e != OK) return e;
-        bool ok = addFscryptKey(key, k.what);
+        bool ok = addFscryptKey(key, k.what, k.ref);
         std::fill(key.begin(), key.end(), 0);
         if (!ok) return FAIL;
     }
@@ -667,7 +676,7 @@ int cmdCe(KeyMint& km, const std::string& credential) {
     e = retrieveKey(km, kUser0CeKeyDir, secret, &ceKey);
     std::fill(secret.begin(), secret.end(), 0);
     if (e != OK) return e;
-    bool ok = addFscryptKey(ceKey, "user 0 CE");
+    bool ok = addFscryptKey(ceKey, "user 0 CE", "CE0");
     std::fill(ceKey.begin(), ceKey.end(), 0);
     return ok ? OK : FAIL;
 }
