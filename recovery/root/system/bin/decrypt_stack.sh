@@ -92,7 +92,7 @@ done
 vendor_mount
 missing=""
 for b in ${VENDOR_BINS}; do
-    [ -e "${b}" ] || missing="${missing} ${b}"
+    [ -e "${b}" ] || [ -e "${b}.samsung" ] || missing="${missing} ${b}"
 done
 if [ -n "${missing}" ]; then
     echo "vendor is missing:${missing}"

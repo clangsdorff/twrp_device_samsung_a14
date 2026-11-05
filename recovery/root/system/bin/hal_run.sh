@@ -16,4 +16,8 @@ esac
 export ANDROID_ROOT=/system
 export ANDROID_DATA=/data
 
+# the LineageOS vendor ships the stock HALs under a .samsung suffix
+bin="$1"
+[ -e "${bin}" ] || [ ! -e "${bin}.samsung" ] || { shift; set -- "${bin}.samsung" "$@"; }
+
 exec /system/bin/tee_linker64 "$@"
