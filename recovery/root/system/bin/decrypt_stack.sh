@@ -12,7 +12,7 @@ wait_prop() {
     while [ "${n}" -lt "$3" ]; do
         [ "$(getprop "$1")" = "$2" ] && return 0
         n=$((n + 1))
-        sleep 0.5
+        sleep 0.1
     done
     return 1
 }
@@ -23,7 +23,7 @@ wait_service() {
         registered "$1" && return 0
         [ "$(getprop "init.svc.$2")" = running ] || return 1
         n=$((n + 1))
-        sleep 0.5
+        sleep 0.2
     done
     return 1
 }
@@ -83,10 +83,10 @@ mount -o bind /tmp/vintf /vendor/etc/vintf && [ -e /vendor/bin/tzdaemon ]
 # twrp.fstab.done is set once the recovery is past its fstab, which mounts /vendor and unmounts it again
 vendor_ready() {
 n=0
-while [ "${n}" -lt 60 ]; do
+while [ "${n}" -lt 300 ]; do
     [ -e /dev/block/mapper/system ] && [ "$(getprop twrp.fstab.done)" = 1 ] && break
     n=$((n + 1))
-    sleep 0.5
+    sleep 0.1
 done
 
 vendor_mount
@@ -104,17 +104,18 @@ fi
 n=0
 until vendor_pin; do
     n=$((n + 1))
-    if [ "${n}" -ge 10 ]; then
+    if [ "${n}" -ge 50 ]; then
         echo "vendor cannot be kept mounted"
         umount /vendor/etc/vintf 2>/dev/null
         umount /vendor 2>/dev/null
         return 1
     fi
-    sleep 0.5
+    sleep 0.1
 done
 }
 
 stack_up() {
+need_gk="$1"
 rom_mount
 echo "rom: $(rom_mounted && echo yes || echo no) vendor: $([ -e /vendor/bin/tzdaemon ] && echo yes || echo no)"
 
@@ -152,9 +153,13 @@ echo "props: release=$(getprop ro.build.version.release) type=$(getprop ro.build
 
 # the 12.1 servicemanager fails addService from the firmware HALs, so /dev/binder goes to the firmware's own
 setprop ctl.stop servicemanager
-sleep 1
+n=0
+while [ "${n}" -lt 20 ] && [ "$(getprop init.svc.servicemanager)" = running ]; do
+    n=$((n + 1))
+    sleep 0.1
+done
 setprop ctl.restart tee-servicemanager
-wait_prop init.svc.tee-servicemanager running 20
+wait_prop init.svc.tee-servicemanager running 100
 setprop servicemanager.ready true
 echo "servicemanager: $(getprop init.svc.tee-servicemanager)"
 [ "$(getprop init.svc.tee-servicemanager)" = running ] || return 1
@@ -162,26 +167,29 @@ echo "servicemanager: $(getprop init.svc.tee-servicemanager)"
 # both readiness properties outlive their daemons, and a Ready left from the last run would pass before the new one is up
 setprop vendor.tzdaemon ""
 setprop ctl.restart tee-tzdaemon
-wait_prop vendor.tzdaemon Ready 30
+wait_prop vendor.tzdaemon Ready 150
 echo "tzdaemon: $(getprop vendor.tzdaemon)"
 [ "$(getprop vendor.tzdaemon)" = Ready ] || return 1
 
 setprop vendor.tzts_daemon ""
 setprop ctl.restart tee-tzts
-wait_prop vendor.tzts_daemon Ready 20
+wait_prop vendor.tzts_daemon Ready 100
 echo "tzts_daemon: $(getprop vendor.tzts_daemon)"
 [ "$(getprop vendor.tzts_daemon)" = Ready ] || return 1
 
 setprop ctl.restart tee-keymint
-wait_service android.hardware.security.keymint.IKeyMintDevice/default tee-keymint 40
+wait_service android.hardware.security.keymint.IKeyMintDevice/default tee-keymint 100
 echo "keymint: $(registered android.hardware.security.keymint.IKeyMintDevice/default && echo registered || echo MISSING)"
 registered android.hardware.security.keymint.IKeyMintDevice/default || return 1
 
-setprop ctl.restart hwservicemanager
-sleep 2
-setprop ctl.restart tee-gatekeeper
-sleep 2
-echo "gatekeeper: $(getprop init.svc.tee-gatekeeper)"
+if [ "${need_gk}" = gatekeeper ]; then
+    setprop ctl.restart hwservicemanager
+    wait_prop init.svc.hwservicemanager running 50
+    setprop ctl.restart tee-gatekeeper
+    wait_prop init.svc.tee-gatekeeper running 50
+    sleep 0.5
+    echo "gatekeeper: $(getprop init.svc.tee-gatekeeper)"
+fi
 
 }
 
@@ -191,7 +199,16 @@ stack_down() {
 for s in ${TEE_SERVICES}; do
     setprop ctl.stop "${s}"
 done
-sleep 2
+n=0
+while [ "${n}" -lt 20 ]; do
+    alive=0
+    for s in ${TEE_SERVICES}; do
+        [ "$(getprop "init.svc.${s}")" = running ] && alive=1 && break
+    done
+    [ "${alive}" = 0 ] && break
+    n=$((n + 1))
+    sleep 0.1
+done
 
 # tzdaemon runs as root here, the firmware's cannot open what this one created and gatekeeper
 # then rejects every credential; the recovery policy also leaves it unlabeled. The top

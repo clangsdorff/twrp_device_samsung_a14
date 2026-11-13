@@ -8,7 +8,7 @@ unset TW_CRYPTO_PASSWORD
 
 echo "===== decrypt_user, credential given: $([ -n "${CREDENTIAL}" ] && echo yes || echo no) ====="
 vendor_ready || exit 1
-stack_up || { stack_down; exit 1; }
+stack_up gatekeeper || { stack_down; exit 1; }
 
 /system/bin/hal_run.sh /system/bin/langsdorff_decrypt ce "${CREDENTIAL}"
 rc=$?
