@@ -1,8 +1,17 @@
 #!/system/bin/sh
 . /system/bin/rom_mount.sh
 
-TEE_SERVICES="tee-gatekeeper tee-keymint tee-tzts tee-tzdaemon tee-servicemanager"
-VENDOR_BINS="/vendor/bin/tzdaemon /vendor/bin/tzts_daemon /vendor/bin/hw/android.hardware.security.keymint-service /vendor/bin/hw/android.hardware.gatekeeper@1.0-service"
+TEE_SERVICES="tee-gatekeeper-aidl tee-gatekeeper tee-keymint tee-tzts tee-tzdaemon tee-servicemanager"
+VENDOR_BINS="/vendor/bin/tzdaemon /vendor/bin/tzts_daemon /vendor/bin/hw/android.hardware.security.keymint-service"
+
+gatekeeper_kind() {
+    if [ -e /vendor/bin/hw/android.hardware.gatekeeper-service.teegris ]; then
+        echo aidl
+    elif [ -e /vendor/bin/hw/android.hardware.gatekeeper@1.0-service ] ||
+         [ -e /vendor/bin/hw/android.hardware.gatekeeper@1.0-service.samsung ]; then
+        echo hidl
+    fi
+}
 
 # libbinder waits forever for a context manager that is not there
 registered() { timeout 3 /system/bin/hal_run.sh /system/tee/bin/service check "$1" 2>/dev/null | grep -q ": found"; }
@@ -38,11 +47,24 @@ rm -rf /tmp/vintf
 mkdir -p /tmp/vintf/manifest
 cat > /tmp/vintf/manifest.xml <<'XML'
 <manifest version="1.0" type="device" target-level="6">
+XML
+if [ "$(gatekeeper_kind)" = aidl ]; then
+cat >> /tmp/vintf/manifest.xml <<'XML'
+    <hal format="aidl">
+        <name>android.hardware.gatekeeper</name>
+        <fqname>IGatekeeper/default</fqname>
+    </hal>
+XML
+else
+cat >> /tmp/vintf/manifest.xml <<'XML'
     <hal format="hidl" override="true">
         <name>android.hardware.gatekeeper</name>
         <transport>hwbinder</transport>
         <fqname>@1.0::IGatekeeper/default</fqname>
     </hal>
+XML
+fi
+cat >> /tmp/vintf/manifest.xml <<'XML'
     <hal format="aidl" override="true">
         <name>android.hardware.security.keymint</name>
         <version>2</version>
@@ -94,6 +116,7 @@ missing=""
 for b in ${VENDOR_BINS}; do
     [ -e "${b}" ] || [ -e "${b}.samsung" ] || missing="${missing} ${b}"
 done
+[ -n "$(gatekeeper_kind)" ] || missing="${missing} gatekeeper"
 if [ -n "${missing}" ]; then
     echo "vendor is missing:${missing}"
     echo "skipping decryption"
@@ -183,12 +206,19 @@ echo "keymint: $(registered android.hardware.security.keymint.IKeyMintDevice/def
 registered android.hardware.security.keymint.IKeyMintDevice/default || return 1
 
 if [ "${need_gk}" = gatekeeper ]; then
-    setprop ctl.restart hwservicemanager
-    wait_prop init.svc.hwservicemanager running 50
-    setprop ctl.restart tee-gatekeeper
-    wait_prop init.svc.tee-gatekeeper running 50
-    sleep 0.5
-    echo "gatekeeper: $(getprop init.svc.tee-gatekeeper)"
+    if [ "$(gatekeeper_kind)" = aidl ]; then
+        setprop ctl.restart tee-gatekeeper-aidl
+        wait_service android.hardware.gatekeeper.IGatekeeper/default tee-gatekeeper-aidl 50
+        echo "gatekeeper-aidl: $(registered android.hardware.gatekeeper.IGatekeeper/default && echo registered || echo MISSING)"
+        registered android.hardware.gatekeeper.IGatekeeper/default || return 1
+    else
+        setprop ctl.restart hwservicemanager
+        wait_prop init.svc.hwservicemanager running 50
+        setprop ctl.restart tee-gatekeeper
+        wait_prop init.svc.tee-gatekeeper running 50
+        sleep 0.5
+        echo "gatekeeper: $(getprop init.svc.tee-gatekeeper)"
+    fi
 fi
 
 }

@@ -75,6 +75,14 @@ service tee-gatekeeper /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.ga
     oneshot
     disabled
 
+service tee-gatekeeper-aidl /system/bin/hal_run.sh /vendor/bin/hw/android.hardware.gatekeeper-service.teegris
+    class main
+    user root
+    group root system
+    seclabel u:r:recovery:s0
+    oneshot
+    disabled
+
 # runs before the recovery binary parses the fstab, so one image serves encrypted and plain firmware
 service fstab-crypto /system/bin/fstab_crypto.sh
     user root

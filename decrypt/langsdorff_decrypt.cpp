@@ -16,7 +16,10 @@
 #include <aidl/android/hardware/security/keymint/PaddingMode.h>
 #include <aidl/android/hardware/security/keymint/Tag.h>
 #include <android/binder_auto_utils.h>
+#include <android/binder_ibinder.h>
 #include <android/binder_manager.h>
+#include <android/binder_parcel.h>
+#include <android/binder_parcel_utils.h>
 #include <android/binder_process.h>
 #include <android/log.h>
 #include <openssl/evp.h>
@@ -570,11 +573,87 @@ bool parseAuthToken(const std::vector<uint8_t>& b, HardwareAuthToken* out) {
     return true;
 }
 
-// The gatekeeper HAL is HIDL only and lives on the recovery's hwservicemanager, so the
-// verify runs in a helper outside the firmware linker.
+// Returns 1 on success, 0 on rejection/error, -1 if the AIDL service is not registered.
+static int gatekeeperVerifyAidl(const std::vector<uint8_t>& gkHandle,
+                                const std::vector<uint8_t>& gkInput, HardwareAuthToken* outToken) {
+    ndk::SpAIBinder binder(
+            AServiceManager_checkService("android.hardware.gatekeeper.IGatekeeper/default"));
+    if (binder.get() == nullptr) return -1;
+
+    ndk::ScopedAParcel in, out;
+    ndk::ScopedAStatus status;
+    binder_status_t st = AIBinder_prepareTransaction(binder.get(), in.getR());
+    if (st != STATUS_OK) {
+        LINE("  gatekeeper aidl prepareTransaction failed: %d", st);
+        return 0;
+    }
+    AParcel_markSensitive(in.get());
+
+    if (::ndk::AParcel_writeData(in.get(), static_cast<int32_t>(100000)) != STATUS_OK ||
+        ::ndk::AParcel_writeData(in.get(), static_cast<int64_t>(0)) != STATUS_OK ||
+        ::ndk::AParcel_writeData(in.get(), gkHandle) != STATUS_OK ||
+        ::ndk::AParcel_writeData(in.get(), gkInput) != STATUS_OK) {
+        LINE("  gatekeeper aidl parcel write failed");
+        return 0;
+    }
+
+    st = AIBinder_transact(binder.get(), FIRST_CALL_TRANSACTION + 3, in.getR(), out.getR(),
+                           FLAG_CLEAR_BUF);
+    if (st != STATUS_OK) {
+        LINE("  gatekeeper aidl transact failed: %d", st);
+        return 0;
+    }
+
+    st = AParcel_readStatusHeader(out.get(), status.getR());
+    if (st != STATUS_OK) {
+        LINE("  gatekeeper aidl readStatusHeader failed: %d", st);
+        return 0;
+    }
+    if (!AStatus_isOk(status.get())) {
+        LINE("  gatekeeper aidl status error: %s", AStatus_getMessage(status.get()));
+        return 0;
+    }
+
+    int32_t nonNull = 0;
+    if (AParcel_readInt32(out.get(), &nonNull) != STATUS_OK || nonNull == 0) {
+        LINE("  gatekeeper aidl null response");
+        return 0;
+    }
+
+    int32_t startPos = AParcel_getDataPosition(out.get());
+    int32_t parcelableSize = 0;
+    if (AParcel_readInt32(out.get(), &parcelableSize) != STATUS_OK || parcelableSize < 4) {
+        LINE("  gatekeeper aidl bad parcelable size");
+        return 0;
+    }
+
+    int32_t statusCode = -1;
+    int32_t timeoutMs = 0;
+    HardwareAuthToken token;
+    if (::ndk::AParcel_readData(out.get(), &statusCode) != STATUS_OK ||
+        ::ndk::AParcel_readData(out.get(), &timeoutMs) != STATUS_OK ||
+        ::ndk::AParcel_readData(out.get(), &token) != STATUS_OK) {
+        LINE("  gatekeeper aidl parcel read failed");
+        return 0;
+    }
+    AParcel_setDataPosition(out.get(), startPos + parcelableSize);
+
+    if (statusCode != 0 && statusCode != 1) {
+        LINE("  gatekeeper rejected the credential (aidl code=%d timeout=%d)", statusCode,
+             timeoutMs);
+        return 0;
+    }
+    *outToken = token;
+    return 1;
+}
+
+// Prefers AIDL gatekeeper on tee-servicemanager; falls back to HIDL 1.0 via gk_verify.
 bool gatekeeperVerify(const std::vector<uint8_t>& gkHandle,
                       const std::vector<uint8_t>& stretchedLskf, HardwareAuthToken* out) {
     std::vector<uint8_t> gkInput = personalizedHash("user-gk-authentication", stretchedLskf);
+    int aidlRc = gatekeeperVerifyAidl(gkHandle, gkInput, out);
+    if (aidlRc >= 0) return aidlRc == 1;
+
     std::string cmd = "/system/bin/gk_verify 100000 " + hex(gkHandle.data(), gkHandle.size()) +
                       " " + hex(gkInput.data(), gkInput.size());
     unsetenv("LD_LIBRARY_PATH");
