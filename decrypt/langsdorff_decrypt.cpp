@@ -573,12 +573,26 @@ bool parseAuthToken(const std::vector<uint8_t>& b, HardwareAuthToken* out) {
     return true;
 }
 
+static void* gkClassOnCreate(void* args) { return args; }
+static void gkClassOnDestroy(void*) {}
+static binder_status_t gkClassOnTransact(AIBinder*, transaction_code_t, const AParcel*, AParcel*) {
+    return STATUS_UNKNOWN_TRANSACTION;
+}
+
 // Returns 1 on success, 0 on rejection/error, -1 if the AIDL service is not registered.
 static int gatekeeperVerifyAidl(const std::vector<uint8_t>& gkHandle,
                                 const std::vector<uint8_t>& gkInput, HardwareAuthToken* outToken) {
     ndk::SpAIBinder binder(
             AServiceManager_checkService("android.hardware.gatekeeper.IGatekeeper/default"));
     if (binder.get() == nullptr) return -1;
+
+    static AIBinder_Class* const gkClass =
+            AIBinder_Class_define("android.hardware.gatekeeper.IGatekeeper", gkClassOnCreate,
+                                  gkClassOnDestroy, gkClassOnTransact);
+    if (gkClass == nullptr || !AIBinder_associateClass(binder.get(), gkClass)) {
+        LINE("  gatekeeper aidl associateClass failed");
+        return -1;
+    }
 
     ndk::ScopedAParcel in, out;
     ndk::ScopedAStatus status;
