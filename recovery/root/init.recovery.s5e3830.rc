@@ -12,7 +12,6 @@ on fs
     exec_start fstab-crypto
 
 on boot
-    setprop servicemanager.ready true
     setprop twrp.decrypt.run 1
     # the ramdisk keystore2 cannot reach the firmware KeyMint and restarts every 5 seconds
     stop keystore2
