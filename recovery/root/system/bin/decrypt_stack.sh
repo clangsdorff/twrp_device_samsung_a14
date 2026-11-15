@@ -14,7 +14,7 @@ gatekeeper_kind() {
 }
 
 # libbinder waits forever for a context manager that is not there
-registered() { timeout 3 /system/bin/hal_run.sh /system/tee/bin/service check "$1" 2>/dev/null | grep -q ": found"; }
+registered() { timeout 3 /system/bin/hal_run.sh "${ROM}/system/bin/service" check "$1" 2>/dev/null | grep -q ": found"; }
 
 wait_prop() {
     n=0
@@ -141,6 +141,10 @@ stack_up() {
 need_gk="$1"
 rom_mount
 echo "rom: $(rom_mounted && echo yes || echo no) vendor: $([ -e /vendor/bin/tzdaemon ] && echo yes || echo no)"
+rom_mounted || return 1
+
+cp -f "${ROM}/system/etc/selinux/plat_service_contexts" /plat_service_contexts 2>/dev/null
+chmod 644 /plat_service_contexts 2>/dev/null
 
 mkdir -p /mnt/vendor/efs 2>/dev/null
 mount | grep -q ' /mnt/vendor/efs ' ||
