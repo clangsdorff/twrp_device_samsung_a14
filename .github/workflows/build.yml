@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       kernel_version:
-        description: langsdorffkernel release tag
-        default: "3.8.4"
-        required: true
+        description: langsdorffkernel release tag (empty = latest)
+        default: ""
+        required: false
       kernel_variant:
         description: Kernel variant (SELinux mode is hardcoded per variant; recovery needs permissive)
         default: p
@@ -37,7 +37,7 @@ env:
   DEVICE_NAME: a14
   LUNCH_TARGET: twrp_a14-eng
   KERNEL_REPO: clangsdorff/langsdorffkernel
-  KERNEL_VERSION: ${{ inputs.kernel_version || '3.8.4' }}
+  KERNEL_VERSION: ${{ inputs.kernel_version }}
   KERNEL_VARIANT: ${{ inputs.kernel_variant || 'p' }}
   # Fixed path: ccache command lines and the cached .repo depend on it
   WORKDIR: /mnt/twrp
@@ -149,8 +149,18 @@ jobs:
 
       # ---------------------------------------------------------------- kernel
       - name: Download langsdorffkernel
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ -z "$KERNEL_VERSION" ] || [ "$KERNEL_VERSION" = "latest" ]; then
+            KERNEL_VERSION=$(gh api "repos/${KERNEL_REPO}/releases?per_page=10" | jq -r --arg v "$KERNEL_VARIANT" '
+              [.[] | select(.draft == false and .prerelease == false)
+                   | select(.assets[].name == ("langsdorff@" + .tag_name + $v + "_a14.tar"))][0].tag_name // empty
+            ')
+            [ -n "$KERNEL_VERSION" ] || { echo "::error::No release found in $KERNEL_REPO for variant $KERNEL_VARIANT"; exit 1; }
+            echo "KERNEL_VERSION=$KERNEL_VERSION" >> "$GITHUB_ENV"
+          fi
           ASSET="langsdorff@${KERNEL_VERSION}${KERNEL_VARIANT}_a14.tar"
           URL="https://github.com/${KERNEL_REPO}/releases/download/${KERNEL_VERSION}/${ASSET//@/%40}"
           mkdir -p "$KERNEL_DIR/tmp"
