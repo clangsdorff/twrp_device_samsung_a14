@@ -589,10 +589,15 @@ static int gatekeeperVerifyAidl(const std::vector<uint8_t>& gkHandle,
     }
     AParcel_markSensitive(in.get());
 
-    if (::ndk::AParcel_writeData(in.get(), static_cast<int32_t>(100000)) != STATUS_OK ||
-        ::ndk::AParcel_writeData(in.get(), static_cast<int64_t>(0)) != STATUS_OK ||
-        ::ndk::AParcel_writeData(in.get(), gkHandle) != STATUS_OK ||
-        ::ndk::AParcel_writeData(in.get(), gkInput) != STATUS_OK) {
+    auto writeBytes = [](AParcel* p, const std::vector<uint8_t>& v) {
+        static const int8_t empty = 0;
+        const int8_t* ptr = v.empty() ? &empty : reinterpret_cast<const int8_t*>(v.data());
+        return AParcel_writeByteArray(p, ptr, static_cast<int32_t>(v.size()));
+    };
+    if (AParcel_writeInt32(in.get(), static_cast<int32_t>(100000)) != STATUS_OK ||
+        AParcel_writeInt64(in.get(), static_cast<int64_t>(0)) != STATUS_OK ||
+        writeBytes(in.get(), gkHandle) != STATUS_OK ||
+        writeBytes(in.get(), gkInput) != STATUS_OK) {
         LINE("  gatekeeper aidl parcel write failed");
         return 0;
     }
@@ -629,10 +634,12 @@ static int gatekeeperVerifyAidl(const std::vector<uint8_t>& gkHandle,
 
     int32_t statusCode = -1;
     int32_t timeoutMs = 0;
+    int32_t hasToken = 0;
     HardwareAuthToken token;
-    if (::ndk::AParcel_readData(out.get(), &statusCode) != STATUS_OK ||
-        ::ndk::AParcel_readData(out.get(), &timeoutMs) != STATUS_OK ||
-        ::ndk::AParcel_readData(out.get(), &token) != STATUS_OK) {
+    if (AParcel_readInt32(out.get(), &statusCode) != STATUS_OK ||
+        AParcel_readInt32(out.get(), &timeoutMs) != STATUS_OK ||
+        AParcel_readInt32(out.get(), &hasToken) != STATUS_OK ||
+        (hasToken != 0 && token.readFromParcel(out.get()) != STATUS_OK)) {
         LINE("  gatekeeper aidl parcel read failed");
         return 0;
     }
